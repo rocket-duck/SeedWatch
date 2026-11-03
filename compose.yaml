@@ -1,7 +1,8 @@
 services:
-  release-monitor:
+  seedwatch:
     build: .
-    container_name: release-monitor
+    image: ghcr.io/rocket-duck/seedwatch:latest
+    container_name: seedwatch
     restart: unless-stopped
     ports:
       - "8787:8787"
@@ -11,9 +12,9 @@ services:
       PROWLARR_DOWNLOAD_CLIENT_ID: ${PROWLARR_DOWNLOAD_CLIENT_ID:-}
       DATABASE_PATH: /data/monitor.db
     volumes:
-      - release-monitor-data:/data
+      - seedwatch-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  release-monitor-data:
+  seedwatch-data:

@@ -1,5 +1,5 @@
 import re
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse
 
 
 EPISODE_PATTERNS = (
@@ -19,7 +19,27 @@ def extract_topic_id(url: str) -> str | None:
     return topic_ids[0] if topic_ids and topic_ids[0].isdigit() else None
 
 
-def find_topic_release(results: list[dict], topic_id: str) -> dict | None:
+def release_identity(url: str) -> str | None:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return None
+        topic_id = extract_topic_id(url)
+        if topic_id:
+            return topic_id
+        host = parsed.netloc.lower().removeprefix("www.")
+        if parsed.scheme == "http" and host.endswith(":80"):
+            host = host[:-3]
+        if parsed.scheme == "https" and host.endswith(":443"):
+            host = host[:-4]
+        path = parsed.path.rstrip("/") or "/"
+        query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
+        return f"{host}{path}{f'?{query}' if query else ''}"
+    except ValueError:
+        return None
+
+
+def find_matching_release(results: list[dict], identity: str) -> dict | None:
     for release in results:
         links = (
             release.get("infoUrl"),
@@ -27,7 +47,7 @@ def find_topic_release(results: list[dict], topic_id: str) -> dict | None:
             release.get("downloadUrl"),
             release.get("comment"),
         )
-        if any(link and extract_topic_id(str(link)) == topic_id for link in links):
+        if any(link and release_identity(str(link)) == identity for link in links):
             return release
     return None
 

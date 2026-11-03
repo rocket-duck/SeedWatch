@@ -57,7 +57,8 @@ async def list_releases():
 @app.post("/api/releases", status_code=status.HTTP_201_CREATED)
 async def add_release(payload: ReleaseCreate):
     try:
-        return await monitor.add_release(payload.url, payload.interval_minutes, payload.search_query)
+        interval_minutes = payload.interval_days * 1440
+        return await monitor.add_release(payload.url, interval_minutes, payload.search_query)
     except MonitorError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except ProwlarrError as exc:
@@ -82,7 +83,8 @@ async def update_release(release_id: int, payload: ReleaseUpdate):
         return release
     if "enabled" in fields:
         fields["next_check_at"] = timestamp() if fields["enabled"] else release["next_check_at"]
-    if "interval_minutes" in fields:
+    if "interval_days" in fields:
+        fields["interval_minutes"] = fields.pop("interval_days") * 1440
         fields["next_check_at"] = timestamp(utc_now() + timedelta(minutes=fields["interval_minutes"]))
     fields["updated_at"] = timestamp()
     return store.update_release(release_id, **fields)

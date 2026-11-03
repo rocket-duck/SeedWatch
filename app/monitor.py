@@ -9,7 +9,7 @@ import httpx
 
 from .config import Settings
 from .prowlarr import ProwlarrClient, ProwlarrError
-from .releases import extract_topic_id, find_topic_release, parse_episodes
+from .releases import find_matching_release, parse_episodes, release_identity
 from .store import Store
 
 
@@ -120,9 +120,9 @@ class Monitor:
         return title
 
     async def add_release(self, url: str, interval_minutes: int, search_query: str | None) -> dict:
-        topic_id = extract_topic_id(url)
-        if not topic_id:
-            raise MonitorError("Нужна ссылка вида https://rutracker.org/forum/viewtopic.php?t=123456")
+        identity = release_identity(url)
+        if not identity:
+            raise MonitorError("Нужна корректная HTTP(S)-ссылка на страницу раздачи")
         if self.store.get_by_url(url):
             raise MonitorError("Эта раздача уже добавлена")
 
@@ -133,11 +133,11 @@ class Monitor:
             query = topic_title
 
         results = await self.prowlarr.search(query)
-        release = find_topic_release(results, topic_id)
+        release = find_matching_release(results, identity)
         if not release:
             raise MonitorError(
-                "Prowlarr не нашёл указанную тему. Добавьте короткий поисковый запрос, "
-                "например Douluo Dalu II, и проверьте индексер RuTracker."
+                "Prowlarr не нашёл указанную раздачу. Добавьте короткий поисковый запрос "
+                "и проверьте, что её индексер включён в Prowlarr."
             )
 
         title = (release.get("title") or "").strip()
@@ -147,7 +147,7 @@ class Monitor:
         return self.store.create_release(
             {
                 "url": url,
-                "topic_id": topic_id,
+                "topic_id": identity,
                 "search_query": search_query,
                 "topic_title": topic_title,
                 "title": title,
@@ -178,7 +178,7 @@ class Monitor:
                     topic_title = await self.fetch_topic_title(current["url"])
                     query = topic_title
                 results = await self.prowlarr.search(query)
-                release = find_topic_release(results, current["topic_id"])
+                release = find_matching_release(results, current["topic_id"])
                 if not release:
                     raise MonitorError("Раздача не найдена в результатах Prowlarr")
                 title = (release.get("title") or "").strip()

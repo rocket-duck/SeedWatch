@@ -37,6 +37,11 @@ function formatEpisodes(episodes) {
   return `${episodes[0]}–${episodes.at(-1)} · ${episodes.length} шт.`;
 }
 
+function formatInterval(minutes) {
+  if (minutes % 1440 === 0) return `${minutes / 1440} дн.`;
+  return `${minutes} мин.`;
+}
+
 function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -74,7 +79,7 @@ function renderRelease(release) {
   const meta = element('div', 'release-meta');
   meta.append(
     metaItem('Распознанные серии', formatEpisodes(release.episodes)),
-    metaItem('Период проверки', `${release.interval_minutes} мин.`),
+    metaItem('Период проверки', formatInterval(release.interval_minutes)),
     metaItem('Последняя проверка', formatDate(release.last_checked_at)),
     metaItem('Следующая проверка', release.enabled ? formatDate(release.next_check_at) : 'Остановлена'),
   );
@@ -128,12 +133,12 @@ form.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify({
         url: data.get('url'),
-        interval_minutes: Number(data.get('interval_minutes')),
+        interval_days: Number(data.get('interval_days')),
         search_query: data.get('search_query') || null,
       }),
     });
     form.reset();
-    form.querySelector('[name="interval_minutes"]').value = 60;
+    form.querySelector('[name="interval_days"]').value = 1;
     formMessage.className = 'form-message success';
     formMessage.textContent = 'Раздача добавлена. Текущие серии сохранены как отправная точка.';
     await loadReleases();

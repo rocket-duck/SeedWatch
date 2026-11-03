@@ -1,0 +1,43 @@
+import pytest
+
+from app.releases import find_matching_release, parse_episodes, release_identity
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Боевой континент 2 (1 сезон: 145-174 серии из 174)", list(range(145, 175))),
+        ("Name S01E145-E174", list(range(145, 175))),
+        ("Name E01-E12", list(range(1, 13))),
+        ("Name [AVC][1-12]", list(range(1, 13))),
+        ("Name 2023-2026 WEB-DL 1080p", []),
+    ],
+)
+def test_parse_episodes(title, expected):
+    assert parse_episodes(title) == expected
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.kinozal.tv:443/details.php?id=456",
+        "http://kinozal.tv/details.php?id=456",
+    ],
+)
+def test_kinozal_identity_ignores_scheme_www_and_default_port(url):
+    assert release_identity(url) == "kinozal.tv/details.php?id=456"
+
+
+def test_generic_identity_ignores_trailing_slash():
+    assert release_identity("https://aniliberty.top/anime/releases/release/show/") == (
+        "aniliberty.top/anime/releases/release/show"
+    )
+
+
+def test_invalid_identity():
+    assert release_identity("ftp://example.com/release") is None
+
+
+def test_find_release_by_generic_url():
+    expected = {"infoUrl": "https://www.aniliberty.top/anime/releases/release/show"}
+    assert find_matching_release([expected], "aniliberty.top/anime/releases/release/show") == expected

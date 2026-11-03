@@ -57,6 +57,18 @@ class QbitClient:
         if response.is_error:
             raise QbitError(f"qBittorrent вернул HTTP {response.status_code}: {response.text.strip()[:500]}")
 
+    async def status(self) -> dict:
+        if not self.configured:
+            raise QbitError("Не задан URL qBittorrent")
+        try:
+            async with self._client() as client:
+                await self._login(client)
+                response = await client.get("/app/version")
+                self._check(response)
+                return {"version": response.text.strip()}
+        except httpx.HTTPError as exc:
+            raise QbitError(f"qBittorrent недоступен: {exc}") from exc
+
     async def snapshot(self) -> set[str]:
         try:
             async with self._client() as client:

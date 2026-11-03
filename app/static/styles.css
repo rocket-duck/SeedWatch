@@ -108,6 +108,7 @@ dialog::backdrop { background: #000a; }
 .history-item small { color: var(--muted); }
 .history-title { color: #c9d1d9; font-size: 13px; overflow-wrap: anywhere; }
 .topbar-actions { display: flex; align-items: center; gap: 16px; }
+.connection-statuses { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 16px; }
 .settings-group { margin: 0 0 20px; padding: 16px; border: 1px solid var(--border); border-radius: 9px; }
 .settings-group h3 { margin: 0 0 14px; font-size: 15px; }
 .settings-group .field { margin-top: 12px; }

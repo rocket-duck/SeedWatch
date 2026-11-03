@@ -172,8 +172,14 @@ class Monitor:
         topic_title = None
         query = search_query
         if not query:
-            topic_title = await self.fetch_topic_title(url)
-            query = topic_title
+            try:
+                topic_title = await self.fetch_topic_title(url)
+                query = topic_title
+            except MonitorError:
+                if not series:
+                    raise
+                query = series["title"]
+                search_query = query
 
         results = await self.prowlarr.search(query)
         release = find_matching_release(results, identity)
@@ -221,8 +227,14 @@ class Monitor:
                 query = current["search_query"]
                 topic_title = None
                 if not query:
-                    topic_title = await self.fetch_topic_title(current["url"])
-                    query = topic_title
+                    try:
+                        topic_title = await self.fetch_topic_title(current["url"])
+                        query = topic_title
+                    except MonitorError:
+                        if not current["sonarr_series_title"]:
+                            raise
+                        query = current["sonarr_series_title"]
+                        self.store.update_release(release_id, search_query=query)
                 results = await self.prowlarr.search(query)
                 release = find_matching_release(results, current["topic_id"])
                 if not release:

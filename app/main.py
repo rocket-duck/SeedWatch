@@ -10,6 +10,7 @@ from .config import Settings
 from .models import ConnectionSettings, ReleaseCreate, ReleaseUpdate
 from .monitor import Monitor, MonitorError, timestamp, utc_now
 from .prowlarr import ProwlarrError
+from .qbit import QbitError
 from .sonarr import SonarrError
 from .store import Store
 
@@ -53,6 +54,11 @@ async def update_connection_settings(payload: ConnectionSettings):
     values = payload.model_dump(exclude_none=True)
     for key in list(values):
         values[key] = values[key].strip()
+        if key.endswith("_url"):
+            if values[key] in ("http://", "https://"):
+                values[key] = ""
+            elif values[key] and not values[key].lower().startswith(("http://", "https://")):
+                values[key] = f"http://{values[key]}"
     for secret in ("prowlarr_api_key", "sonarr_api_key", "qbit_password", "qbit_api_key"):
         if secret in values and not values[secret]:
             del values[secret]
@@ -67,6 +73,22 @@ async def prowlarr_status():
         return await monitor.prowlarr.status()
     except ProwlarrError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@app.get("/api/sonarr/status")
+async def sonarr_status():
+    try:
+        return await monitor.sonarr.status()
+    except SonarrError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+
+
+@app.get("/api/qbit/status")
+async def qbit_status():
+    try:
+        return await monitor.qbit.status()
+    except QbitError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
 
 
 @app.get("/api/sonarr/series")

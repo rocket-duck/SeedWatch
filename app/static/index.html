@@ -13,7 +13,11 @@
       <h1>SeedWatch</h1>
     </div>
     <div class="topbar-actions">
-      <div id="prowlarr-status" class="connection">Проверка Prowlarr…</div>
+      <div class="connection-statuses">
+        <div id="prowlarr-status" class="connection">Проверка Prowlarr…</div>
+        <div id="sonarr-status" class="connection">Проверка Sonarr…</div>
+        <div id="qbit-status" class="connection">Проверка qBittorrent…</div>
+      </div>
       <button id="open-settings" class="secondary" type="button">Настройки</button>
     </div>
   </header>
@@ -79,17 +83,17 @@
     <form id="settings-form">
       <section class="settings-group">
         <h3>Prowlarr</h3>
-        <label class="field"><span>URL</span><input name="prowlarr_url" type="url" placeholder="http://192.168.1.10:9696"></label>
+        <label class="field"><span>URL</span><input name="prowlarr_url" type="text" inputmode="url" placeholder="http://192.168.1.10:9696"></label>
         <label class="field"><span>API key</span><input name="prowlarr_api_key" type="password" autocomplete="off"></label>
       </section>
       <section class="settings-group">
         <h3>Sonarr</h3>
-        <label class="field"><span>URL</span><input name="sonarr_url" type="url" placeholder="http://192.168.1.10:8989"></label>
+        <label class="field"><span>URL</span><input name="sonarr_url" type="text" inputmode="url" placeholder="http://192.168.1.10:8989"></label>
         <label class="field"><span>API key</span><input name="sonarr_api_key" type="password" autocomplete="off"></label>
       </section>
       <section class="settings-group">
         <h3>qBittorrent</h3>
-        <label class="field"><span>URL WebUI</span><input name="qbit_url" type="url" placeholder="http://192.168.1.10:8080"></label>
+        <label class="field"><span>URL WebUI</span><input name="qbit_url" type="text" inputmode="url" placeholder="http://192.168.1.10:8080"></label>
         <label class="field">
           <span>Способ авторизации</span>
           <select id="qbit-auth-method" name="qbit_auth_method">

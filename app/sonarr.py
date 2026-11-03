@@ -27,6 +27,17 @@ class SonarrClient:
         if response.is_error:
             raise SonarrError(f"Sonarr вернул HTTP {response.status_code}: {response.text.strip()[:500]}")
 
+    async def status(self) -> dict:
+        if not self.configured:
+            raise SonarrError("Не заданы URL или API key Sonarr")
+        try:
+            async with self._client() as client:
+                response = await client.get("/system/status")
+                self._check(response)
+                return response.json()
+        except httpx.HTTPError as exc:
+            raise SonarrError(f"Sonarr недоступен: {exc}") from exc
+
     async def list_series(self) -> list[dict]:
         if not self.configured:
             raise SonarrError("Не заданы SONARR_URL или SONARR_API_KEY")

@@ -115,17 +115,26 @@ async function loadReleases() {
   }
 }
 
-async function checkProwlarr() {
-  const node = document.querySelector('#prowlarr-status');
+async function checkConnection(name, label) {
+  const node = document.querySelector(`#${name}-status`);
   try {
-    const status = await api('/api/prowlarr/status');
-    node.textContent = `Prowlarr ${status.version || ''} подключён`;
+    const status = await api(`/api/${name}/status`);
+    node.textContent = `${label} ${status.version || ''} подключён`;
     node.className = 'connection online';
+    node.title = '';
   } catch (error) {
-    node.textContent = 'Prowlarr недоступен';
+    node.textContent = `${label} недоступен`;
     node.title = error.message;
     node.className = 'connection offline';
   }
+}
+
+async function checkConnections() {
+  await Promise.all([
+    checkConnection('prowlarr', 'Prowlarr'),
+    checkConnection('sonarr', 'Sonarr'),
+    checkConnection('qbit', 'qBittorrent'),
+  ]);
 }
 
 async function loadSonarrSeries() {
@@ -162,7 +171,7 @@ form.addEventListener('submit', async (event) => {
     form.reset();
     form.querySelector('[name="interval_days"]').value = 1;
     formMessage.className = 'form-message success';
-    formMessage.textContent = 'Раздача добавлена. Текущие серии сохранены как отправная точка.';
+    formMessage.textContent = 'Раздача добавлена и проверена.';
     await loadReleases();
   } catch (error) {
     formMessage.textContent = error.message;
@@ -228,12 +237,12 @@ function toggleQbitAuthFields() {
 async function loadConnectionSettings() {
   const settings = await api('/api/settings');
   for (const name of ['prowlarr_url', 'sonarr_url', 'qbit_url', 'qbit_auth_method', 'qbit_username']) {
-    settingsForm.elements[name].value = settings[name] || '';
+    settingsForm.elements[name].value = settings[name] || (name.endsWith('_url') ? 'http://' : '');
   }
   for (const name of ['prowlarr_api_key', 'sonarr_api_key', 'qbit_password', 'qbit_api_key']) {
     const input = settingsForm.elements[name];
     input.value = '';
-    input.placeholder = settings[`${name}_set`] ? 'Сохранено; пусто — не менять' : 'Не задано';
+    input.placeholder = settings[`${name}_set`] ? '************' : '';
   }
   toggleQbitAuthFields();
 }
@@ -262,7 +271,7 @@ settingsForm.addEventListener('submit', async (event) => {
     await api('/api/settings', { method: 'PUT', body: JSON.stringify(values) });
     settingsMessage.className = 'form-message success';
     settingsMessage.textContent = 'Настройки сохранены и применены.';
-    await Promise.all([checkProwlarr(), loadSonarrSeries(), loadConnectionSettings()]);
+    await Promise.all([checkConnections(), loadSonarrSeries(), loadConnectionSettings()]);
   } catch (error) {
     settingsMessage.textContent = error.message;
   } finally {
@@ -277,6 +286,6 @@ historyDialog.addEventListener('click', (event) => {
 });
 
 loadReleases();
-checkProwlarr();
+checkConnections();
 loadSonarrSeries();
 setInterval(loadReleases, 15000);

@@ -8,13 +8,15 @@ services:
       - "8787:8787"
     environment:
       PROWLARR_URL: ${PROWLARR_URL:-http://host.docker.internal:9696}
-      PROWLARR_API_KEY: ${PROWLARR_API_KEY:?Set PROWLARR_API_KEY}
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY:-}
       PROWLARR_DOWNLOAD_CLIENT_ID: ${PROWLARR_DOWNLOAD_CLIENT_ID:-}
       SONARR_URL: ${SONARR_URL:-}
       SONARR_API_KEY: ${SONARR_API_KEY:-}
       QBIT_URL: ${QBIT_URL:-}
+      QBIT_AUTH_METHOD: ${QBIT_AUTH_METHOD:-login}
       QBIT_USERNAME: ${QBIT_USERNAME:-}
       QBIT_PASSWORD: ${QBIT_PASSWORD:-}
+      QBIT_API_KEY: ${QBIT_API_KEY:-}
       DATABASE_PATH: /data/monitor.db
     volumes:
       - seedwatch-data:/data

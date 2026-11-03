@@ -5,6 +5,9 @@ const formMessage = document.querySelector('#form-message');
 const historyDialog = document.querySelector('#history-dialog');
 const historyContent = document.querySelector('#history-content');
 const sonarrSeriesSelect = document.querySelector('#sonarr-series');
+const settingsDialog = document.querySelector('#settings-dialog');
+const settingsForm = document.querySelector('#settings-form');
+const settingsMessage = document.querySelector('#settings-message');
 
 const statusNames = {
   monitoring: 'Отслеживается',
@@ -212,6 +215,57 @@ releasesNode.addEventListener('click', async (event) => {
     await loadReleases();
   } catch (error) {
     window.alert(error.message);
+    button.disabled = false;
+  }
+});
+
+function toggleQbitAuthFields() {
+  const method = document.querySelector('#qbit-auth-method').value;
+  document.querySelector('#qbit-login-fields').hidden = method !== 'login';
+  document.querySelector('#qbit-api-key-field').hidden = method !== 'api_key';
+}
+
+async function loadConnectionSettings() {
+  const settings = await api('/api/settings');
+  for (const name of ['prowlarr_url', 'sonarr_url', 'qbit_url', 'qbit_auth_method', 'qbit_username']) {
+    settingsForm.elements[name].value = settings[name] || '';
+  }
+  for (const name of ['prowlarr_api_key', 'sonarr_api_key', 'qbit_password', 'qbit_api_key']) {
+    const input = settingsForm.elements[name];
+    input.value = '';
+    input.placeholder = settings[`${name}_set`] ? 'Сохранено; пусто — не менять' : 'Не задано';
+  }
+  toggleQbitAuthFields();
+}
+
+document.querySelector('#open-settings').addEventListener('click', async () => {
+  settingsMessage.textContent = '';
+  settingsDialog.showModal();
+  try {
+    await loadConnectionSettings();
+  } catch (error) {
+    settingsMessage.textContent = error.message;
+  }
+});
+document.querySelector('#close-settings').addEventListener('click', () => settingsDialog.close());
+document.querySelector('#qbit-auth-method').addEventListener('change', toggleQbitAuthFields);
+settingsDialog.addEventListener('click', (event) => {
+  if (event.target === settingsDialog) settingsDialog.close();
+});
+settingsForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = settingsForm.querySelector('button[type="submit"]');
+  button.disabled = true;
+  settingsMessage.className = 'form-message';
+  try {
+    const values = Object.fromEntries(new FormData(settingsForm).entries());
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify(values) });
+    settingsMessage.className = 'form-message success';
+    settingsMessage.textContent = 'Настройки сохранены и применены.';
+    await Promise.all([checkProwlarr(), loadSonarrSeries(), loadConnectionSettings()]);
+  } catch (error) {
+    settingsMessage.textContent = error.message;
+  } finally {
     button.disabled = false;
   }
 });

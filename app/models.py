@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -22,3 +24,15 @@ class ReleaseCreate(BaseModel):
 class ReleaseUpdate(BaseModel):
     enabled: bool | None = None
     interval_days: int | None = Field(default=None, ge=1, le=365)
+
+
+class ConnectionSettings(BaseModel):
+    prowlarr_url: str | None = None
+    prowlarr_api_key: str | None = None
+    sonarr_url: str | None = None
+    sonarr_api_key: str | None = None
+    qbit_url: str | None = None
+    qbit_auth_method: Literal["login", "api_key"] | None = None
+    qbit_username: str | None = None
+    qbit_password: str | None = None
+    qbit_api_key: str | None = None

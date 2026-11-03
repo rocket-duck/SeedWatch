@@ -9,10 +9,13 @@
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">Prowlarr → qBittorrent</p>
-      <h1>Release Monitor</h1>
+      <p class="eyebrow">Prowlarr → Sonarr → qBittorrent</p>
+      <h1>SeedWatch</h1>
     </div>
-    <div id="prowlarr-status" class="connection">Проверка Prowlarr…</div>
+    <div class="topbar-actions">
+      <div id="prowlarr-status" class="connection">Проверка Prowlarr…</div>
+      <button id="open-settings" class="secondary" type="button">Настройки</button>
+    </div>
   </header>
 
   <main>
@@ -20,7 +23,7 @@
       <div class="section-heading">
         <div>
           <h2>Добавить раздачу</h2>
-          <p>Сервис запомнит текущие серии и отправит торрент только после их обновления.</p>
+          <p>При добавлении SeedWatch сразу проверит недостающие серии, затем будет следить по расписанию.</p>
         </div>
       </div>
       <form id="add-form">
@@ -65,6 +68,44 @@
       <button id="close-history" class="icon-button" type="button" aria-label="Закрыть">×</button>
     </div>
     <div id="history-content"></div>
+  </dialog>
+
+  <dialog id="settings-dialog">
+    <div class="dialog-heading">
+      <h2>Подключения</h2>
+      <button id="close-settings" class="icon-button" type="button" aria-label="Закрыть">×</button>
+    </div>
+    <p class="settings-note">Настройки хранятся в базе SeedWatch. Пустые поля секретов не изменяют сохранённые значения.</p>
+    <form id="settings-form">
+      <section class="settings-group">
+        <h3>Prowlarr</h3>
+        <label class="field"><span>URL</span><input name="prowlarr_url" type="url" placeholder="http://192.168.1.10:9696"></label>
+        <label class="field"><span>API key</span><input name="prowlarr_api_key" type="password" autocomplete="off"></label>
+      </section>
+      <section class="settings-group">
+        <h3>Sonarr</h3>
+        <label class="field"><span>URL</span><input name="sonarr_url" type="url" placeholder="http://192.168.1.10:8989"></label>
+        <label class="field"><span>API key</span><input name="sonarr_api_key" type="password" autocomplete="off"></label>
+      </section>
+      <section class="settings-group">
+        <h3>qBittorrent</h3>
+        <label class="field"><span>URL WebUI</span><input name="qbit_url" type="url" placeholder="http://192.168.1.10:8080"></label>
+        <label class="field">
+          <span>Способ авторизации</span>
+          <select id="qbit-auth-method" name="qbit_auth_method">
+            <option value="login">Логин и пароль</option>
+            <option value="api_key">API key (qBittorrent 5.2+)</option>
+          </select>
+        </label>
+        <div id="qbit-login-fields">
+          <label class="field"><span>Логин</span><input name="qbit_username" type="text" autocomplete="username"></label>
+          <label class="field"><span>Пароль</span><input name="qbit_password" type="password" autocomplete="new-password"></label>
+        </div>
+        <label id="qbit-api-key-field" class="field" hidden><span>API key</span><input name="qbit_api_key" type="password" autocomplete="off"></label>
+      </section>
+      <button class="primary" type="submit">Сохранить настройки</button>
+      <p id="settings-message" class="form-message" role="alert"></p>
+    </form>
   </dialog>
 
   <script src="/static/app.js" defer></script>

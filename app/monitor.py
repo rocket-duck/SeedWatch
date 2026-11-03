@@ -77,11 +77,37 @@ class Monitor:
             settings.qbit_password,
             settings.request_timeout,
             settings.qbit_metadata_timeout,
+            settings.qbit_auth_method,
+            settings.qbit_api_key,
         )
         self.http: httpx.AsyncClient | None = None
         self.task: asyncio.Task | None = None
         self.stop_event = asyncio.Event()
         self.locks = defaultdict(asyncio.Lock)
+
+    def configure(self, values: dict[str, str]) -> None:
+        self.prowlarr.base_url = values.get("prowlarr_url", self.prowlarr.base_url).rstrip("/")
+        self.prowlarr.api_key = values.get("prowlarr_api_key", self.prowlarr.api_key)
+        self.sonarr.base_url = values.get("sonarr_url", self.sonarr.base_url).rstrip("/")
+        self.sonarr.api_key = values.get("sonarr_api_key", self.sonarr.api_key)
+        self.qbit.base_url = values.get("qbit_url", self.qbit.base_url).rstrip("/")
+        self.qbit.auth_method = values.get("qbit_auth_method", self.qbit.auth_method)
+        self.qbit.username = values.get("qbit_username", self.qbit.username)
+        self.qbit.password = values.get("qbit_password", self.qbit.password)
+        self.qbit.api_key = values.get("qbit_api_key", self.qbit.api_key)
+
+    def public_settings(self) -> dict:
+        return {
+            "prowlarr_url": self.prowlarr.base_url,
+            "prowlarr_api_key_set": bool(self.prowlarr.api_key),
+            "sonarr_url": self.sonarr.base_url,
+            "sonarr_api_key_set": bool(self.sonarr.api_key),
+            "qbit_url": self.qbit.base_url,
+            "qbit_auth_method": self.qbit.auth_method,
+            "qbit_username": self.qbit.username,
+            "qbit_password_set": bool(self.qbit.password),
+            "qbit_api_key_set": bool(self.qbit.api_key),
+        }
 
     async def start(self) -> None:
         self.http = httpx.AsyncClient(
@@ -184,7 +210,7 @@ class Monitor:
             }
         )
 
-    async def check_release(self, release_id: int) -> dict | None:
+    async def check_release(self, release_id: int, initial: bool = False) -> dict | None:
         async with self.locks[release_id]:
             current = self.store.get_release(release_id)
             if not current:
@@ -206,7 +232,7 @@ class Monitor:
                     raise MonitorError("Prowlarr вернул раздачу без названия")
 
                 now = timestamp()
-                if title == current["title"]:
+                if title == current["title"] and not initial:
                     return self.store.update_release(
                         release_id,
                         topic_title=topic_title or current["topic_title"],
@@ -218,7 +244,8 @@ class Monitor:
 
                 old_episodes = set(current["episodes"])
                 new_episodes_list = parse_episodes(title)
-                added = sorted(set(new_episodes_list) - old_episodes)
+                previous_episodes = set() if initial else old_episodes
+                added = sorted(set(new_episodes_list) - previous_episodes)
                 if added:
                     missing = added
                     if current["sonarr_series_id"]:

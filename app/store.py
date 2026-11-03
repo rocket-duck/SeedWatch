@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS releases (
     sonarr_series_type TEXT
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     release_id INTEGER NOT NULL REFERENCES releases(id) ON DELETE CASCADE,
@@ -176,3 +181,18 @@ class Store:
                 (release_id, limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_settings(self) -> dict[str, str]:
+        with self.connect() as connection:
+            rows = connection.execute("SELECT key, value FROM settings").fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+    def save_settings(self, values: dict[str, str]) -> None:
+        with self.connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO settings (key, value) VALUES (:key, :value)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                [{"key": key, "value": value} for key, value in values.items()],
+            )

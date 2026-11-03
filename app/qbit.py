@@ -16,22 +16,34 @@ class QbitError(RuntimeError):
 
 
 class QbitClient:
-    def __init__(self, base_url: str, username: str, password: str, timeout: float, metadata_timeout: float):
+    def __init__(
+        self,
+        base_url: str,
+        username: str,
+        password: str,
+        timeout: float,
+        metadata_timeout: float,
+        auth_method: str = "login",
+        api_key: str = "",
+    ):
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
         self.timeout = timeout
         self.metadata_timeout = metadata_timeout
+        self.auth_method = auth_method
+        self.api_key = api_key
 
     @property
     def configured(self) -> bool:
         return bool(self.base_url)
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(base_url=f"{self.base_url}/api/v2", timeout=self.timeout)
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.auth_method == "api_key" and self.api_key else {}
+        return httpx.AsyncClient(base_url=f"{self.base_url}/api/v2", timeout=self.timeout, headers=headers)
 
     async def _login(self, client: httpx.AsyncClient) -> None:
-        if not self.username:
+        if self.auth_method == "api_key" or not self.username:
             return
         response = await client.post(
             "/auth/login",

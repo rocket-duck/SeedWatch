@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings
-from .models import ReleaseCreate, ReleaseUpdate
+from .models import ConnectionSettings, ReleaseCreate, ReleaseUpdate
 from .monitor import Monitor, MonitorError, timestamp, utc_now
 from .prowlarr import ProwlarrError
 from .sonarr import SonarrError
@@ -23,6 +23,7 @@ static_dir = Path(__file__).parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     store.init()
+    monitor.configure(store.get_settings())
     await monitor.start()
     yield
     await monitor.stop()
@@ -39,7 +40,25 @@ async def index():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "prowlarr_configured": bool(settings.prowlarr_api_key)}
+    return {"status": "ok", "prowlarr_configured": bool(monitor.prowlarr.api_key)}
+
+
+@app.get("/api/settings")
+async def get_connection_settings():
+    return monitor.public_settings()
+
+
+@app.put("/api/settings")
+async def update_connection_settings(payload: ConnectionSettings):
+    values = payload.model_dump(exclude_none=True)
+    for key in list(values):
+        values[key] = values[key].strip()
+    for secret in ("prowlarr_api_key", "sonarr_api_key", "qbit_password", "qbit_api_key"):
+        if secret in values and not values[secret]:
+            del values[secret]
+    store.save_settings(values)
+    monitor.configure(store.get_settings())
+    return monitor.public_settings()
 
 
 @app.get("/api/prowlarr/status")
@@ -67,12 +86,13 @@ async def list_releases():
 async def add_release(payload: ReleaseCreate):
     try:
         interval_minutes = payload.interval_days * 1440
-        return await monitor.add_release(
+        release = await monitor.add_release(
             payload.url,
             interval_minutes,
             payload.search_query,
             payload.sonarr_series_id,
         )
+        return await monitor.check_release(release["id"], initial=True)
     except MonitorError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except (ProwlarrError, SonarrError) as exc:

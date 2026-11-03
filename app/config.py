@@ -11,8 +11,10 @@ class Settings:
     sonarr_url: str
     sonarr_api_key: str
     qbit_url: str
+    qbit_auth_method: str
     qbit_username: str
     qbit_password: str
+    qbit_api_key: str
     qbit_metadata_timeout: float
     database_path: Path
     request_timeout: float
@@ -27,8 +29,10 @@ class Settings:
             sonarr_url=os.getenv("SONARR_URL", "").rstrip("/"),
             sonarr_api_key=os.getenv("SONARR_API_KEY", "").strip(),
             qbit_url=os.getenv("QBIT_URL", "").rstrip("/"),
+            qbit_auth_method=os.getenv("QBIT_AUTH_METHOD", "login"),
             qbit_username=os.getenv("QBIT_USERNAME", ""),
             qbit_password=os.getenv("QBIT_PASSWORD", ""),
+            qbit_api_key=os.getenv("QBIT_API_KEY", ""),
             qbit_metadata_timeout=float(os.getenv("QBIT_METADATA_TIMEOUT", "60")),
             database_path=Path(os.getenv("DATABASE_PATH", "./data/monitor.db")),
             request_timeout=float(os.getenv("REQUEST_TIMEOUT", "45")),

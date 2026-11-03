@@ -107,6 +107,11 @@ dialog::backdrop { background: #000a; }
 .history-item p { margin-bottom: 6px; line-height: 1.45; }
 .history-item small { color: var(--muted); }
 .history-title { color: #c9d1d9; font-size: 13px; overflow-wrap: anywhere; }
+.topbar-actions { display: flex; align-items: center; gap: 16px; }
+.settings-group { margin: 0 0 20px; padding: 16px; border: 1px solid var(--border); border-radius: 9px; }
+.settings-group h3 { margin: 0 0 14px; font-size: 15px; }
+.settings-group .field { margin-top: 12px; }
+.settings-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
 
 @media (max-width: 760px) {
   .topbar { align-items: flex-start; padding: 22px 20px; }

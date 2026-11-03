@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release Monitor</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Prowlarr → qBittorrent</p>
+      <h1>Release Monitor</h1>
+    </div>
+    <div id="prowlarr-status" class="connection">Проверка Prowlarr…</div>
+  </header>
+
+  <main>
+    <section class="panel add-panel">
+      <div class="section-heading">
+        <div>
+          <h2>Добавить раздачу</h2>
+          <p>Сервис запомнит текущие серии и отправит торрент только после их обновления.</p>
+        </div>
+      </div>
+      <form id="add-form">
+        <label class="field field-wide">
+          <span>Ссылка на тему RuTracker</span>
+          <input name="url" type="url" required placeholder="https://rutracker.org/forum/viewtopic.php?t=123456">
+        </label>
+        <label class="field">
+          <span>Интервал, минут</span>
+          <input name="interval_minutes" type="number" required min="1" max="10080" value="60">
+        </label>
+        <label class="field field-query">
+          <span>Поисковый запрос <small>необязательно</small></span>
+          <input name="search_query" type="text" placeholder="Например: Douluo Dalu II">
+          <small>Заполните, если страница раздачи недоступна или полное название плохо ищется.</small>
+        </label>
+        <button class="primary" type="submit">Добавить и проверить</button>
+        <p id="form-message" class="form-message" role="alert"></p>
+      </form>
+    </section>
+
+    <section>
+      <div class="list-heading">
+        <h2>Отслеживаемые раздачи</h2>
+        <button id="refresh" class="secondary" type="button">Обновить</button>
+      </div>
+      <div id="releases" class="release-list"></div>
+      <div id="empty" class="empty" hidden>Пока ничего не отслеживается.</div>
+    </section>
+  </main>
+
+  <dialog id="history-dialog">
+    <div class="dialog-heading">
+      <h2>История изменений</h2>
+      <button id="close-history" class="icon-button" type="button" aria-label="Закрыть">×</button>
+    </div>
+    <div id="history-content"></div>
+  </dialog>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

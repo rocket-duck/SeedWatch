@@ -9,7 +9,9 @@ import httpx
 
 from .config import Settings
 from .prowlarr import ProwlarrClient, ProwlarrError
+from .qbit import QbitClient, QbitError
 from .releases import find_matching_release, parse_episodes, release_identity
+from .sonarr import SonarrClient
 from .store import Store
 
 
@@ -68,6 +70,14 @@ class Monitor:
             settings.request_timeout,
             settings.prowlarr_download_client_id,
         )
+        self.sonarr = SonarrClient(settings.sonarr_url, settings.sonarr_api_key, settings.request_timeout)
+        self.qbit = QbitClient(
+            settings.qbit_url,
+            settings.qbit_username,
+            settings.qbit_password,
+            settings.request_timeout,
+            settings.qbit_metadata_timeout,
+        )
         self.http: httpx.AsyncClient | None = None
         self.task: asyncio.Task | None = None
         self.stop_event = asyncio.Event()
@@ -119,13 +129,20 @@ class Monitor:
             raise MonitorError("На странице раздачи не найден заголовок. Укажите поисковый запрос вручную.")
         return title
 
-    async def add_release(self, url: str, interval_minutes: int, search_query: str | None) -> dict:
+    async def add_release(
+        self,
+        url: str,
+        interval_minutes: int,
+        search_query: str | None,
+        sonarr_series_id: int | None,
+    ) -> dict:
         identity = release_identity(url)
         if not identity:
             raise MonitorError("Нужна корректная HTTP(S)-ссылка на страницу раздачи")
         if self.store.get_by_url(url):
             raise MonitorError("Эта раздача уже добавлена")
 
+        series = await self.sonarr.get_series(sonarr_series_id) if sonarr_series_id else None
         topic_title = None
         query = search_query
         if not query:
@@ -161,6 +178,9 @@ class Monitor:
                 "next_check_at": timestamp(now + timedelta(minutes=interval_minutes)),
                 "created_at": timestamp(now),
                 "updated_at": timestamp(now),
+                "sonarr_series_id": series["id"] if series else None,
+                "sonarr_series_title": series["title"] if series else None,
+                "sonarr_series_type": series.get("seriesType", "standard") if series else None,
             }
         )
 
@@ -200,8 +220,46 @@ class Monitor:
                 new_episodes_list = parse_episodes(title)
                 added = sorted(set(new_episodes_list) - old_episodes)
                 if added:
+                    missing = added
+                    if current["sonarr_series_id"]:
+                        downloaded = await self.sonarr.downloaded_episodes(
+                            current["sonarr_series_id"],
+                            current["sonarr_series_type"],
+                        )
+                        missing = sorted(set(new_episodes_list) - downloaded)
+                    if not missing:
+                        message = "Раздача обновилась, но все её серии уже скачаны в Sonarr"
+                        self.store.update_release(
+                            release_id,
+                            title=title,
+                            topic_title=topic_title or current["topic_title"],
+                            episodes=new_episodes_list,
+                            last_status="changed",
+                            last_error=None,
+                            last_checked_at=now,
+                            updated_at=now,
+                        )
+                        self.store.add_history(release_id, now, "changed", title, message)
+                        return self.store.get_release(release_id)
+
+                    previous_hashes = None
+                    delta_error = None
+                    if current["sonarr_series_id"] and self.qbit.configured:
+                        try:
+                            previous_hashes = await self.qbit.snapshot()
+                        except QbitError as exc:
+                            delta_error = str(exc)
                     await self.prowlarr.grab(release)
-                    message = f"Новые серии {compact_episodes(added)} отправлены в Prowlarr"
+                    message = f"Недостающие серии {compact_episodes(missing)} отправлены в Prowlarr"
+                    if previous_hashes is not None:
+                        try:
+                            delta_message = await self.qbit.apply_delta(previous_hashes, release, missing)
+                        except QbitError as exc:
+                            delta_message = f"{exc}; торрент оставлен полным"
+                        message = f"{message}. {delta_message}"
+                    elif current["sonarr_series_id"]:
+                        reason = delta_error or "QBIT_URL не задан"
+                        message = f"{message}. {reason}; торрент отправлен полностью"
                     self.store.update_release(
                         release_id,
                         title=title,

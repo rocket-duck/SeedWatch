@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS releases (
     last_grabbed_at TEXT,
     next_check_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    sonarr_series_id INTEGER,
+    sonarr_series_title TEXT,
+    sonarr_series_type TEXT
 );
 
 CREATE TABLE IF NOT EXISTS history (
@@ -61,6 +64,15 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as connection:
             connection.executescript(SCHEMA)
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(releases)")}
+            migrations = {
+                "sonarr_series_id": "INTEGER",
+                "sonarr_series_title": "TEXT",
+                "sonarr_series_type": "TEXT",
+            }
+            for name, definition in migrations.items():
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE releases ADD COLUMN {name} {definition}")
 
     @staticmethod
     def _release(row: sqlite3.Row | None) -> dict | None:
@@ -101,11 +113,13 @@ class Store:
                 INSERT INTO releases (
                     url, topic_id, search_query, topic_title, title, episodes,
                     interval_minutes, enabled, last_status, last_error,
-                    last_checked_at, last_grabbed_at, next_check_at, created_at, updated_at
+                    last_checked_at, last_grabbed_at, next_check_at, created_at, updated_at,
+                    sonarr_series_id, sonarr_series_title, sonarr_series_type
                 ) VALUES (
                     :url, :topic_id, :search_query, :topic_title, :title, :episodes,
                     :interval_minutes, :enabled, :last_status, :last_error,
-                    :last_checked_at, :last_grabbed_at, :next_check_at, :created_at, :updated_at
+                    :last_checked_at, :last_grabbed_at, :next_check_at, :created_at, :updated_at,
+                    :sonarr_series_id, :sonarr_series_title, :sonarr_series_type
                 )
                 """,
                 {**data, "episodes": json.dumps(data["episodes"]), "enabled": int(data["enabled"])},
@@ -118,6 +132,7 @@ class Store:
             "search_query", "topic_title", "title", "episodes", "interval_minutes",
             "enabled", "last_status", "last_error", "last_checked_at",
             "last_grabbed_at", "next_check_at", "updated_at",
+            "sonarr_series_id", "sonarr_series_title", "sonarr_series_type",
         }
         unknown = set(fields) - allowed
         if unknown:

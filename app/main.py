@@ -10,6 +10,7 @@ from .config import Settings
 from .models import ReleaseCreate, ReleaseUpdate
 from .monitor import Monitor, MonitorError, timestamp, utc_now
 from .prowlarr import ProwlarrError
+from .sonarr import SonarrError
 from .store import Store
 
 
@@ -49,6 +50,14 @@ async def prowlarr_status():
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
+@app.get("/api/sonarr/series")
+async def sonarr_series():
+    try:
+        return await monitor.sonarr.list_series()
+    except SonarrError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+
+
 @app.get("/api/releases")
 async def list_releases():
     return store.list_releases()
@@ -58,10 +67,15 @@ async def list_releases():
 async def add_release(payload: ReleaseCreate):
     try:
         interval_minutes = payload.interval_days * 1440
-        return await monitor.add_release(payload.url, interval_minutes, payload.search_query)
+        return await monitor.add_release(
+            payload.url,
+            interval_minutes,
+            payload.search_query,
+            payload.sonarr_series_id,
+        )
     except MonitorError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    except ProwlarrError as exc:
+    except (ProwlarrError, SonarrError) as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 

@@ -4,6 +4,7 @@ const form = document.querySelector('#add-form');
 const formMessage = document.querySelector('#form-message');
 const historyDialog = document.querySelector('#history-dialog');
 const historyContent = document.querySelector('#history-content');
+const sonarrSeriesSelect = document.querySelector('#sonarr-series');
 
 const statusNames = {
   monitoring: 'Отслеживается',
@@ -83,6 +84,9 @@ function renderRelease(release) {
     metaItem('Последняя проверка', formatDate(release.last_checked_at)),
     metaItem('Следующая проверка', release.enabled ? formatDate(release.next_check_at) : 'Остановлена'),
   );
+  if (release.sonarr_series_title) {
+    meta.append(metaItem('Сериал в Sonarr', release.sonarr_series_title));
+  }
   card.append(header, meta);
   if (release.last_error) card.append(element('p', 'release-error', release.last_error));
 
@@ -121,6 +125,20 @@ async function checkProwlarr() {
   }
 }
 
+async function loadSonarrSeries() {
+  try {
+    const series = await api('/api/sonarr/series');
+    const options = [new Option('Без интеграции Sonarr', '')];
+    for (const item of series) {
+      options.push(new Option(`${item.title}${item.year ? ` (${item.year})` : ''}`, item.id));
+    }
+    sonarrSeriesSelect.replaceChildren(...options);
+  } catch (error) {
+    sonarrSeriesSelect.options[0].text = 'Sonarr недоступен — без привязки';
+    sonarrSeriesSelect.title = error.message;
+  }
+}
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = form.querySelector('button[type="submit"]');
@@ -135,6 +153,7 @@ form.addEventListener('submit', async (event) => {
         url: data.get('url'),
         interval_days: Number(data.get('interval_days')),
         search_query: data.get('search_query') || null,
+        sonarr_series_id: data.get('sonarr_series_id') ? Number(data.get('sonarr_series_id')) : null,
       }),
     });
     form.reset();
@@ -205,4 +224,5 @@ historyDialog.addEventListener('click', (event) => {
 
 loadReleases();
 checkProwlarr();
+loadSonarrSeries();
 setInterval(loadReleases, 15000);

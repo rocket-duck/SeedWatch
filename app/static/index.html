@@ -37,6 +37,13 @@
           <input name="search_query" type="text" placeholder="Например: Douluo Dalu II">
           <small>Заполните, если страница раздачи недоступна или полное название плохо ищется.</small>
         </label>
+        <label class="field field-query">
+          <span>Сериал в Sonarr <small>необязательно</small></span>
+          <select id="sonarr-series" name="sonarr_series_id">
+            <option value="">Без интеграции Sonarr</option>
+          </select>
+          <small>При выборе сериала SeedWatch попробует отключить уже скачанные файлы в qBittorrent.</small>
+        </label>
         <button class="primary" type="submit">Добавить и проверить</button>
         <p id="form-message" class="form-message" role="alert"></p>
       </form>

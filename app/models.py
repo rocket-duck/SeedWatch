@@ -5,6 +5,7 @@ class ReleaseCreate(BaseModel):
     url: str = Field(min_length=10, max_length=2000)
     interval_days: int = Field(default=1, ge=1, le=365)
     search_query: str | None = Field(default=None, max_length=500)
+    sonarr_series_id: int | None = Field(default=None, gt=0)
 
     @field_validator("url")
     @classmethod

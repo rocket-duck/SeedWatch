@@ -131,6 +131,15 @@
         </div>
         <label id="qbit-api-key-field" class="field" hidden><span>API key</span><input name="qbit_api_key" type="password" autocomplete="off"></label>
       </section>
+      <section class="settings-group">
+        <h3>Страницы раздач</h3>
+        <label class="field"><span>FlareSolverr URL</span><input name="flaresolverr_url" type="text" inputmode="url" placeholder="http://192.168.1.10:8191"></label>
+        <label class="field"><span>Рутрекер логин</span><input name="rutracker_username" type="text" autocomplete="username"></label>
+        <label class="field"><span>Рутрекер пароль</span><input name="rutracker_password" type="password" autocomplete="off"></label>
+        <label class="field"><span>Кинозал логин</span><input name="kinozal_username" type="text" autocomplete="username"></label>
+        <label class="field"><span>Кинозал пароль</span><input name="kinozal_password" type="password" autocomplete="off"></label>
+        <small>Нужны, чтобы читать заголовки страниц раздач через Cloudflare и под логином (сезоны и серии парсятся из заголовка страницы).</small>
+      </section>
       <button class="primary" type="submit">Сохранить настройки</button>
       <p id="settings-message" class="form-message" role="alert"></p>
     </form>

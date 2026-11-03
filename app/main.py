@@ -34,6 +34,14 @@ app = FastAPI(title="Release Monitor", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
+@app.middleware("http")
+async def disable_caching(request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/", include_in_schema=False)
 async def index():
     return FileResponse(static_dir / "index.html")
@@ -59,7 +67,7 @@ async def update_connection_settings(payload: ConnectionSettings):
                 values[key] = ""
             elif values[key] and not values[key].lower().startswith(("http://", "https://")):
                 values[key] = f"http://{values[key]}"
-    for secret in ("prowlarr_api_key", "sonarr_api_key", "qbit_password", "qbit_api_key"):
+    for secret in ("prowlarr_api_key", "sonarr_api_key", "qbit_password", "qbit_api_key", "rutracker_password", "kinozal_password"):
         if secret in values and not values[secret]:
             del values[secret]
     store.save_settings(values)

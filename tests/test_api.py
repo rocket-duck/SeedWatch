@@ -140,7 +140,7 @@ def test_grab_sets_sonarr_category_in_qbit(client, configure, services):
     assert release["last_status"] == "grabbed"
     assert services.categories == [{"hash": "abc123", "category": "tv-sonarr"}]
     history = client.get(f"/api/releases/{release['id']}/history").json()
-    assert "tv-sonarr" in history[0]["message"]
+    assert "категория" not in history[0]["message"]
 
 
 def test_update_release_interval_query_and_sonarr(client, configure, services):
@@ -175,6 +175,154 @@ def test_edit_dialog_markup(client):
     assert 'id="edit-dialog"' in page
     script = client.get("/static/app.js").text
     assert "edit-dialog" in script
+
+
+def test_pages_and_static_assets_disable_caching(client):
+    for path in ("/", "/static/app.js", "/static/styles.css", "/static/index.html"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.headers["cache-control"] == "no-cache", path
+
+
+def test_poll_parses_episodes_from_topic_page_title(client, configure, services):
+    configure()
+    url = f"{services.base_url}/details.php?id=555"
+    services.releases.append({
+        "url": url,
+        "title": "Tunshi Xingkong (Swallowed Star) 2026 MVO WEBRip 1080p - RUSSIAN",
+        "indexerId": 5,
+        "hash": "sw555",
+        "files": [
+            {"index": i, "name": f"Swallowed.Star.S05E{number}.mkv"}
+            for i, number in enumerate(range(33, 40))
+        ],
+    })
+    services.page_titles[url] = (
+        "Пожиратель звёзд (5 сезон: 1-39 серии из 52) / Tunshi Xingkong (Swallowed Star) / 2026 WEBRip (1080p)"
+    )
+    release = add_release(client, services, index=3, series_id=30, search_query="Swallowed Star")
+    assert release["last_status"] == "grabbed"
+    assert release["episodes"] == list(range(1, 40))
+    assert "Пожиратель звёзд" in release["title"]
+    assert len(services.grabs) == 1
+
+    services.page_titles[url] = (
+        "Пожиратель звёзд (5 сезон: 1-45 серии из 52) / Tunshi Xingkong (Swallowed Star) / 2026 WEBRip (1080p)"
+    )
+    services.release(3)["files"] = [
+        {"index": i, "name": f"Swallowed.Star.S05E{number}.mkv"}
+        for i, number in enumerate(range(40, 46))
+    ]
+    checked = client.post(f"/api/releases/{release['id']}/check").json()
+    assert checked["last_status"] == "grabbed"
+    assert checked["episodes"] == list(range(1, 46))
+    assert len(services.grabs) == 2
+
+
+KINOZAL_LOGIN_HTML = (
+    '<html><head><title>Вход</title></head><body>'
+    '<form action="/takelogin.php"><input type="hidden" name="touser" value="1">'
+    '<input type="hidden" name="wact" value="takerecover">'
+    '<input name="username"><input type="password" name="password"></form></body></html>'
+)
+RUTRACKER_LOGIN_HTML = (
+    '<html><head><title>rutracker.org</title></head><body>'
+    '<form action="login.php"><input name="login_username">'
+    '<input name="login_password"></form></body></html>'
+)
+
+
+def add_kinozal_swallowed_star(services, topic_id):
+    url = f"https://kinozal.guru/details.php?id={topic_id}"
+    services.releases.append({
+        "url": url,
+        "title": "Tunshi Xingkong (Swallowed Star) 2026 MVO WEBRip 1080p - RUSSIAN",
+        "indexerId": 5,
+        "hash": f"sw{topic_id}",
+        "files": [
+            {"index": i, "name": f"Swallowed.Star.S05E{number}.mkv"}
+            for i, number in enumerate(range(33, 40))
+        ],
+    })
+    services.fs_private_pages[url] = (
+        "Пожиратель звёзд (5 сезон: 1-39 серии из 52) / Tunshi Xingkong (Swallowed Star) / 2026 WEBRip (1080p)"
+    )
+    services.fs_pages_raw["https://kinozal.guru/login.php"] = KINOZAL_LOGIN_HTML
+    return url
+
+
+def test_kinozal_fetch_logs_in_via_flaresolverr(client, configure, services):
+    url = add_kinozal_swallowed_star(services, 777)
+    configure(
+        flaresolverr_url=services.base_url,
+        kinozal_username="ku",
+        kinozal_password="kp",
+    )
+    release = add_release(client, services, index=3, series_id=30, search_query="Swallowed Star")
+    assert release["last_status"] == "grabbed"
+    assert release["episodes"] == list(range(1, 40))
+    assert len(services.grabs) == 1
+
+
+def test_rutracker_fetch_logs_in_via_flaresolverr(client, configure, services):
+    url = "https://rutracker.org/forum/viewtopic.php?t=999"
+    services.releases.append({
+        "url": url,
+        "title": "Static Name WEBRip 1080p - RUSSIAN",
+        "indexerId": 6,
+        "hash": "rt999",
+        "files": [
+            {"index": i, "name": f"Show.S05E{number}.mkv"}
+            for i, number in enumerate(range(33, 40))
+        ],
+    })
+    services.page_titles[url] = (
+        "Шоу (5 сезон: 1-39 серии из 52) / Static Name / 2026 WEBRip (1080p) :: RuTracker.org"
+    )
+    services.fs_pages_raw[url] = RUTRACKER_LOGIN_HTML
+    configure(
+        flaresolverr_url=services.base_url,
+        rutracker_username="rt",
+        rutracker_password="rp",
+    )
+    release = add_release(client, services, index=3, series_id=30, search_query="Static")
+    assert release["last_status"] == "grabbed"
+    assert release["episodes"] == list(range(1, 40))
+    assert len(services.grabs) == 1
+
+
+def test_kinozal_wrong_password_falls_back_to_indexer_title(client, configure, services):
+    add_kinozal_swallowed_star(services, 778)
+    configure(
+        flaresolverr_url=services.base_url,
+        kinozal_username="ku",
+        kinozal_password="wrong",
+    )
+    release = add_release(client, services, index=3, series_id=30, search_query="Swallowed Star")
+    assert release["last_status"] == "changed"
+    assert services.grabs == []
+
+
+def test_tracker_settings_are_persisted_and_masked(client, configure):
+    public = configure(
+        flaresolverr_url="http://localhost:8191",
+        rutracker_username="rt_user",
+        rutracker_password="rt_pass",
+        kinozal_username="kz_user",
+        kinozal_password="kz_pass",
+    )
+    assert public["flaresolverr_url"] == "http://localhost:8191"
+    assert public["rutracker_username"] == "rt_user"
+    assert public["rutracker_password_set"] is True
+    assert public["kinozal_password_set"] is True
+    assert "rutracker_password" not in public
+    assert "kinozal_password" not in public
+    assert main.store.get_settings()["kinozal_password"] == "kz_pass"
+
+    response = client.put("/api/settings", json={"rutracker_password": "", "kinozal_password": ""})
+    assert response.status_code == 200
+    assert main.store.get_settings()["rutracker_password"] == "rt_pass"
+    assert main.store.get_settings()["kinozal_password"] == "kz_pass"
 
 
 def test_aniliberty_url_is_supported(client, configure, services):

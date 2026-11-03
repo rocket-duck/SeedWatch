@@ -275,10 +275,10 @@ function toggleQbitAuthFields() {
 
 async function loadConnectionSettings() {
   const settings = await api('/api/settings');
-  for (const name of ['prowlarr_url', 'sonarr_url', 'qbit_url', 'qbit_auth_method', 'qbit_username']) {
+  for (const name of ['prowlarr_url', 'sonarr_url', 'qbit_url', 'flaresolverr_url', 'qbit_auth_method', 'qbit_username', 'rutracker_username', 'kinozal_username']) {
     settingsForm.elements[name].value = settings[name] || (name.endsWith('_url') ? 'http://' : '');
   }
-  for (const name of ['prowlarr_api_key', 'sonarr_api_key', 'qbit_password', 'qbit_api_key']) {
+  for (const name of ['prowlarr_api_key', 'sonarr_api_key', 'qbit_password', 'qbit_api_key', 'rutracker_password', 'kinozal_password']) {
     const input = settingsForm.elements[name];
     input.value = '';
     input.placeholder = settings[`${name}_set`] ? '************' : '';

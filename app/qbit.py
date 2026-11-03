@@ -90,17 +90,14 @@ class QbitClient:
             async with self._client() as client:
                 await self._login(client)
                 torrent_hash = await self._find_new_torrent(client, previous_hashes, release)
-                notes = []
                 if category:
                     response = await client.post(
                         "/torrents/setCategory",
                         data={"hashes": torrent_hash, "category": category},
                     )
                     self._check(response)
-                    notes.append(f"установлена категория {category}")
                 files = await self._wait_for_files(client, torrent_hash)
-                result = await self._skip_downloaded(client, torrent_hash, files, set(missing_episodes))
-                return f"{result}; {'. '.join(notes)}" if notes else result
+                return await self._skip_downloaded(client, torrent_hash, files, set(missing_episodes))
         except httpx.HTTPError as exc:
             raise QbitError(f"qBittorrent недоступен: {exc}") from exc
 

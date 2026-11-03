@@ -7,6 +7,7 @@ from app.releases import find_matching_release, parse_episodes, parse_season, re
     ("title", "expected"),
     [
         ("Боевой континент 2 (1 сезон: 145-174 серии из 174)", list(range(145, 175))),
+        ("Пожиратель звёзд (Поглощаю звезду) (5 сезон: 1-39 серии из 52 + Фильм) / Tunshi Xingkong (Swallowed Star) / 2026 / ЛМ / WEBRip (1080p)", list(range(1, 40))),
         ("Name S01E145-E174", list(range(145, 175))),
         ("Name E01-E12", list(range(1, 13))),
         ("Name [AVC][1-12]", list(range(1, 13))),
@@ -24,6 +25,7 @@ def test_parse_episodes(title, expected):
         ("Name S01E145-E174", 1),
         ("Боевой континент 2 (1 сезон: 145-174 серии из 174)", 1),
         ("Name Season 2 E01-E12", 2),
+        ("Пожиратель звёзд (Поглощаю звезду) (5 сезон: 1-39 серии из 52 + Фильм) / Tunshi Xingkong (Swallowed Star) / 2026 / ЛМ / WEBRip (1080p)", 5),
         ("Name E01-E12", None),
         ("Name 2023-2026 WEB-DL 1080p", None),
         ("(S1,2,3,4) Name [1-12]", None),

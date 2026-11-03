@@ -51,8 +51,14 @@ class MockServices:
         }
         self.downloaded = {10: set(range(1, 174)), 20: {1}}
         self.season_files = {
-            30: {1: set(range(1, 27)), 2: set(range(1, 37)), 3: set(range(1, 24))},
+            30: {1: set(range(1, 27)), 2: set(range(1, 37)), 3: set(range(1, 24)), 5: set(range(1, 33))},
         }
+        self.page_titles = {}
+        self.fs_pages_raw = {}
+        self.fs_private_pages = {}
+        self.fs_sessions = set()
+        self.kinozal_creds = ("ku", "kp")
+        self.rutracker_creds = ("rt", "rp")
         self.torrents = []
         self.grabs = []
         self.searches = []
@@ -63,6 +69,21 @@ class MockServices:
         self.auth_method = "api_key"
         self.api_key = "qbt_test_key"
         self.base_url = ""
+
+    def fs_title_for(self, url, session):
+        logged_in = session in self.fs_sessions
+        if not logged_in and url in self.fs_pages_raw:
+            return self.fs_pages_raw[url]
+        if "kinozal" in url and url in self.fs_private_pages:
+            if not logged_in:
+                return (
+                    '<html><head><title>Вход :: Кинозал.GURU</title></head>'
+                    '<body><form action="/takelogin.php"></form></body></html>'
+                )
+            title = self.fs_private_pages[url]
+            return f"<html><head><title>{title}</title></head></html>"
+        title = self.page_titles.get(url, "Not Found")
+        return f"<html><head><title>{title}</title></head></html>"
 
     def release(self, index=0):
         return self.releases[index]
@@ -100,6 +121,17 @@ def handler_for(mock):
         def do_GET(self):
             parsed = urlparse(self.path)
             if parsed.path.startswith(("/forum/", "/details.php")):
+                url = f"{mock.base_url}{parsed.path}"
+                if parsed.query:
+                    url = f"{url}?{parsed.query}"
+                if url in mock.page_titles:
+                    body = f"<html><head><title>{mock.page_titles[url]}</title></head></html>".encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 return self.send_json({"detail": "forbidden"}, 403)
             if parsed.path == "/api/v1/system/status":
                 return self.send_json({"version": "test"})
@@ -174,6 +206,30 @@ def handler_for(mock):
         def do_POST(self):
             parsed = urlparse(self.path)
             data = self.body()
+            if parsed.path == "/v1":
+                payload = json.loads(data)
+                cmd = payload.get("cmd")
+                session = payload.get("session", "")
+                if cmd == "sessions.create":
+                    return self.send_json({"status": "ok", "solution": {"session": "mock-fs"}})
+                if cmd == "request.get":
+                    html = mock.fs_title_for(payload["url"], session)
+                    return self.send_json({"status": "ok", "solution": {"response": html}})
+                if cmd == "request.post":
+                    post = parse_qs(payload.get("postData", ""))
+                    url = payload["url"]
+                    if "takelogin.php" in url:
+                        user = post.get("username", [""])[0]
+                        password = post.get("password", [""])[0]
+                        if (user, password) == mock.kinozal_creds:
+                            mock.fs_sessions.add(session)
+                    if "login.php" in url and "login_username" in post:
+                        user = post.get("login_username", [""])[0]
+                        password = post.get("login_password", [""])[0]
+                        if (user, password) == mock.rutracker_creds:
+                            mock.fs_sessions.add(session)
+                    return self.send_json({"status": "ok", "solution": {"response": "<html><head><title>logged in</title></head></html>"}})
+                return self.send_json({"status": "err", "message": f"unknown cmd {cmd}"})
             if parsed.path == "/api/v2/auth/login":
                 mock.logins.append(parse_qs(data))
                 self.send_response(200)
@@ -222,6 +278,11 @@ def client(services, tmp_path):
         qbit_password="secret",
         qbit_api_key=services.api_key,
         qbit_metadata_timeout=2,
+        flaresolverr_url="",
+        rutracker_username="",
+        rutracker_password="",
+        kinozal_username="",
+        kinozal_password="",
         database_path=tmp_path / "monitor.db",
         request_timeout=5,
     )
@@ -233,7 +294,7 @@ def client(services, tmp_path):
 
 @pytest.fixture
 def configure(client, services):
-    def apply(auth_method="api_key"):
+    def apply(auth_method="api_key", **extra):
         services.auth_method = auth_method
         response = client.put("/api/settings", json={
             "prowlarr_url": services.base_url,
@@ -245,6 +306,7 @@ def configure(client, services):
             "qbit_username": "admin",
             "qbit_password": "secret",
             "qbit_api_key": services.api_key,
+            **extra,
         })
         assert response.status_code == 200, response.text
         return response.json()

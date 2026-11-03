@@ -46,3 +46,8 @@ class ConnectionSettings(BaseModel):
     qbit_username: str | None = None
     qbit_password: str | None = None
     qbit_api_key: str | None = None
+    flaresolverr_url: str | None = None
+    rutracker_username: str | None = None
+    rutracker_password: str | None = None
+    kinozal_username: str | None = None
+    kinozal_password: str | None = None

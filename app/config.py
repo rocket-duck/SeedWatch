@@ -16,6 +16,11 @@ class Settings:
     qbit_password: str
     qbit_api_key: str
     qbit_metadata_timeout: float
+    flaresolverr_url: str
+    rutracker_username: str
+    rutracker_password: str
+    kinozal_username: str
+    kinozal_password: str
     database_path: Path
     request_timeout: float
 
@@ -34,6 +39,11 @@ class Settings:
             qbit_password=os.getenv("QBIT_PASSWORD", ""),
             qbit_api_key=os.getenv("QBIT_API_KEY", ""),
             qbit_metadata_timeout=float(os.getenv("QBIT_METADATA_TIMEOUT", "60")),
+            flaresolverr_url=os.getenv("FLARESOLVERR_URL", "").rstrip("/"),
+            rutracker_username=os.getenv("RUTRACKER_USERNAME", ""),
+            rutracker_password=os.getenv("RUTRACKER_PASSWORD", ""),
+            kinozal_username=os.getenv("KINOZAL_USERNAME", ""),
+            kinozal_password=os.getenv("KINOZAL_PASSWORD", ""),
             database_path=Path(os.getenv("DATABASE_PATH", "./data/monitor.db")),
             request_timeout=float(os.getenv("REQUEST_TIMEOUT", "45")),
         )

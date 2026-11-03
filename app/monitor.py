@@ -4,10 +4,12 @@ from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
+from urllib.parse import urlparse
 
 import httpx
 
 from .config import Settings
+from .flaresolverr import FlareSolverrClient, FlareSolverrError
 from .prowlarr import ProwlarrClient, ProwlarrError
 from .qbit import QbitClient, QbitError
 from .releases import find_matching_release, parse_episodes, parse_season, release_identity
@@ -80,6 +82,11 @@ class Monitor:
             settings.qbit_auth_method,
             settings.qbit_api_key,
         )
+        self.flaresolverr = FlareSolverrClient(settings.flaresolverr_url)
+        self.tracker_credentials = {
+            "rutracker": (settings.rutracker_username, settings.rutracker_password),
+            "kinozal": (settings.kinozal_username, settings.kinozal_password),
+        }
         self.http: httpx.AsyncClient | None = None
         self.task: asyncio.Task | None = None
         self.stop_event = asyncio.Event()
@@ -95,6 +102,16 @@ class Monitor:
         self.qbit.username = values.get("qbit_username", self.qbit.username)
         self.qbit.password = values.get("qbit_password", self.qbit.password)
         self.qbit.api_key = values.get("qbit_api_key", self.qbit.api_key)
+        flaresolverr_url = values.get("flaresolverr_url", self.flaresolverr.base_url).rstrip("/")
+        if flaresolverr_url != self.flaresolverr.base_url:
+            self.flaresolverr.base_url = flaresolverr_url
+            self.flaresolverr.session = None
+        for tracker in ("rutracker", "kinozal"):
+            username, password = self.tracker_credentials[tracker]
+            self.tracker_credentials[tracker] = (
+                values.get(f"{tracker}_username", username),
+                values.get(f"{tracker}_password", password),
+            )
 
     def public_settings(self) -> dict:
         return {
@@ -107,6 +124,11 @@ class Monitor:
             "qbit_username": self.qbit.username,
             "qbit_password_set": bool(self.qbit.password),
             "qbit_api_key_set": bool(self.qbit.api_key),
+            "flaresolverr_url": self.flaresolverr.base_url,
+            "rutracker_username": self.tracker_credentials["rutracker"][0],
+            "rutracker_password_set": bool(self.tracker_credentials["rutracker"][1]),
+            "kinozal_username": self.tracker_credentials["kinozal"][0],
+            "kinozal_password_set": bool(self.tracker_credentials["kinozal"][1]),
         }
 
     async def start(self) -> None:
@@ -141,19 +163,104 @@ class Monitor:
                 await asyncio.wait_for(self.stop_event.wait(), timeout=10)
 
     async def fetch_topic_title(self, url: str) -> str:
-        try:
-            response = await self.http.get(url)
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise MonitorError(
-                f"Не удалось прочитать страницу раздачи: {exc}. Укажите поисковый запрос вручную."
-            ) from exc
-        parser = TitleParser()
-        parser.feed(response.text)
-        title = re.sub(r"\s*::\s*RuTracker\.org.*$", "", parser.title, flags=re.IGNORECASE).strip()
+        if self.flaresolverr.configured:
+            html = await self._fetch_via_flaresolverr(url)
+        else:
+            try:
+                response = await self.http.get(url)
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise MonitorError(
+                    f"Не удалось прочитать страницу раздачи: {exc}. Укажите поисковый запрос вручную."
+                ) from exc
+            html = response.text
+        title = self._extract_title(html)
         if not title:
             raise MonitorError("На странице раздачи не найден заголовок. Укажите поисковый запрос вручную.")
         return title
+
+    @staticmethod
+    def _extract_title(html: str) -> str | None:
+        parser = TitleParser()
+        parser.feed(html)
+        title = re.sub(r"\s*::\s*RuTracker\.org.*$", "", parser.title, flags=re.IGNORECASE).strip()
+        if not title or "just a moment" in title.lower():
+            return None
+        return title
+
+    @staticmethod
+    def _tracker_for(url: str) -> str | None:
+        host = urlparse(url).netloc.lower().removeprefix("www.")
+        if "kinozal" in host:
+            return "kinozal"
+        if "rutracker" in host:
+            return "rutracker"
+        return None
+
+    async def _fetch_via_flaresolverr(self, url: str) -> str:
+        tracker = self._tracker_for(url)
+        try:
+            html = await self.flaresolverr.get(url)
+        except FlareSolverrError as exc:
+            raise MonitorError(f"Не удалось прочитать страницу раздачи через FlareSolverr: {exc}") from exc
+        if tracker and self._is_login_page(tracker, html):
+            username, password = self.tracker_credentials.get(tracker, ("", ""))
+            if not username or not password:
+                raise MonitorError(f"Трекер {tracker} требует входа. Задайте логин и пароль в настройках.")
+            await self._login_tracker(tracker, url, username, password)
+            try:
+                html = await self.flaresolverr.get(url)
+            except FlareSolverrError as exc:
+                raise MonitorError(f"Не удалось прочитать страницу раздачи через FlareSolverr: {exc}") from exc
+            if self._is_login_page(tracker, html):
+                raise MonitorError(f"Трекер {tracker} не принял логин/пароль. Проверьте учётные данные в настройках.")
+        return html
+
+    @staticmethod
+    def _is_login_page(tracker: str, html: str) -> bool:
+        if tracker == "kinozal":
+            return "takelogin.php" in html
+        return 'name="login_username"' in html or "name='login_username'" in html
+
+    async def _login_tracker(self, tracker: str, url: str, username: str, password: str) -> None:
+        parsed = urlparse(url)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        try:
+            if tracker == "kinozal":
+                login_html = await self.flaresolverr.get(f"{base}/login.php")
+                fields = self._hidden_fields(login_html, "takelogin.php")
+                fields["username"] = username
+                fields["password"] = password
+                await self.flaresolverr.post(f"{base}/takelogin.php", fields)
+            else:
+                await self.flaresolverr.post(
+                    f"{base}/forum/login.php",
+                    {
+                        "redirect": "/forum/index.php",
+                        "login_username": username,
+                        "login_password": password,
+                        "login": "Вход",
+                    },
+                )
+        except FlareSolverrError as exc:
+            raise MonitorError(f"Не удалось войти на трекер {tracker}: {exc}") from exc
+
+    @staticmethod
+    def _hidden_fields(html: str, form_marker: str) -> dict[str, str]:
+        match = re.search(
+            rf"<form[^>]*{re.escape(form_marker)}[^>]*>(.*?)</form>", html, re.IGNORECASE | re.DOTALL
+        )
+        if not match:
+            raise MonitorError(f"На странице входа не найдена форма {form_marker}")
+        fields = {}
+        for tag in re.findall(r"<input[^>]*>", match.group(1), re.IGNORECASE):
+            if 'type="hidden"' not in tag.lower():
+                continue
+            name = re.search(r"name=[\"']([^\"']+)[\"']", tag, re.IGNORECASE)
+            value = re.search(r"value=[\"']([^\"']*)[\"']", tag, re.IGNORECASE)
+            if name:
+                fields[name.group(1)] = value.group(1) if value else ""
+        return fields
 
     async def add_release(
         self,
@@ -235,13 +342,21 @@ class Monitor:
                             raise
                         query = current["sonarr_series_title"]
                         self.store.update_release(release_id, search_query=query)
+                if topic_title is None:
+                    try:
+                        topic_title = await self.fetch_topic_title(current["url"])
+                    except MonitorError:
+                        topic_title = None
                 results = await self.prowlarr.search(query)
                 release = find_matching_release(results, current["topic_id"])
                 if not release:
                     raise MonitorError("Раздача не найдена в результатах Prowlarr")
-                title = (release.get("title") or "").strip()
-                if not title:
+                indexer_title = (release.get("title") or "").strip()
+                if not indexer_title:
                     raise MonitorError("Prowlarr вернул раздачу без названия")
+                title = indexer_title
+                if topic_title and parse_episodes(topic_title):
+                    title = topic_title
 
                 now = timestamp()
                 if title == current["title"] and not initial:

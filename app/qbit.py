@@ -79,13 +79,28 @@ class QbitClient:
         except httpx.HTTPError as exc:
             raise QbitError(f"qBittorrent недоступен: {exc}") from exc
 
-    async def apply_delta(self, previous_hashes: set[str], release: dict, missing_episodes: list[int]) -> str:
+    async def apply_delta(
+        self,
+        previous_hashes: set[str],
+        release: dict,
+        missing_episodes: list[int],
+        category: str | None = None,
+    ) -> str:
         try:
             async with self._client() as client:
                 await self._login(client)
                 torrent_hash = await self._find_new_torrent(client, previous_hashes, release)
+                notes = []
+                if category:
+                    response = await client.post(
+                        "/torrents/setCategory",
+                        data={"hashes": torrent_hash, "category": category},
+                    )
+                    self._check(response)
+                    notes.append(f"установлена категория {category}")
                 files = await self._wait_for_files(client, torrent_hash)
-                return await self._skip_downloaded(client, torrent_hash, files, set(missing_episodes))
+                result = await self._skip_downloaded(client, torrent_hash, files, set(missing_episodes))
+                return f"{result}; {'. '.join(notes)}" if notes else result
         except httpx.HTTPError as exc:
             raise QbitError(f"qBittorrent недоступен: {exc}") from exc
 

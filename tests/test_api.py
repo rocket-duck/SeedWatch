@@ -40,7 +40,7 @@ def test_settings_page_and_series_list(client, configure):
     assert "API key (qBittorrent 5.2+)" in page
     series = client.get("/api/sonarr/series")
     assert series.status_code == 200
-    assert len(series.json()) == 2
+    assert len(series.json()) == 3
 
 
 def test_immediate_sonarr_download_applies_delta_with_bearer(client, configure, services):
@@ -111,6 +111,72 @@ def test_polling_downloads_new_missing_episode(client, configure, services):
     assert len(services.grabs) == 1
 
 
+def test_new_season_episodes_are_matched_against_their_own_season(client, configure, services):
+    configure()
+    services.releases.append({
+        "url": "https://kinozal.guru/details.php?id=789",
+        "title": "Demon - S3E1-24 - 2026 MVO WEBRip 1080p - RUSSIAN",
+        "indexerId": 4,
+        "hash": "demon3",
+        "files": [{"index": 0, "name": "Demon.S03E24.mkv"}],
+    })
+    release = add_release(client, services, index=3, series_id=30)
+    assert release["last_status"] == "grabbed"
+    assert len(services.grabs) == 1
+
+    services.release(3)["title"] = "Demon - S3E1-31 - 2026 MVO WEBRip 1080p - RUSSIAN"
+    services.release(3)["files"] = [
+        {"index": i, "name": f"Demon.S03E{number}.mkv"}
+        for i, number in enumerate(range(24, 32))
+    ]
+    checked = client.post(f"/api/releases/{release['id']}/check").json()
+    assert checked["last_status"] == "grabbed"
+    assert len(services.grabs) == 2
+
+
+def test_grab_sets_sonarr_category_in_qbit(client, configure, services):
+    configure()
+    release = add_release(client, services, series_id=10)
+    assert release["last_status"] == "grabbed"
+    assert services.categories == [{"hash": "abc123", "category": "tv-sonarr"}]
+    history = client.get(f"/api/releases/{release['id']}/history").json()
+    assert "tv-sonarr" in history[0]["message"]
+
+
+def test_update_release_interval_query_and_sonarr(client, configure, services):
+    configure()
+    release = add_release(client, services, series_id=10)
+    url = f"/api/releases/{release['id']}"
+
+    response = client.patch(url, json={
+        "interval_days": 7,
+        "search_query": "New Query",
+        "sonarr_series_id": 20,
+    })
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated["interval_minutes"] == 7 * 1440
+    assert updated["search_query"] == "New Query"
+    assert updated["sonarr_series_id"] == 20
+    assert updated["sonarr_series_title"] == "Other"
+    assert updated["sonarr_series_type"] == "standard"
+
+    response = client.patch(url, json={"search_query": None, "sonarr_series_id": None})
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated["search_query"] is None
+    assert updated["sonarr_series_id"] is None
+    assert updated["sonarr_series_title"] is None
+    assert updated["sonarr_series_type"] is None
+
+
+def test_edit_dialog_markup(client):
+    page = client.get("/").text
+    assert 'id="edit-dialog"' in page
+    script = client.get("/static/app.js").text
+    assert "edit-dialog" in script
+
+
 def test_aniliberty_url_is_supported(client, configure, services):
     release = add_release(client, services, index=2)
     assert release["last_status"] == "grabbed"
@@ -129,6 +195,12 @@ def test_service_statuses_and_toolbar(client, configure):
         assert f'id="{service}-status"' in page
     script = client.get("/static/app.js").text
     assert "'************'" in script
+
+
+def test_connection_checks_retry_and_time_out(client):
+    script = client.get("/static/app.js").text
+    assert "AbortController" in script
+    assert "setInterval(checkConnections" in script
 
 
 def test_urls_without_scheme_are_normalized(client, services):

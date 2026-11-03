@@ -10,8 +10,8 @@ import httpx
 from .config import Settings
 from .prowlarr import ProwlarrClient, ProwlarrError
 from .qbit import QbitClient, QbitError
-from .releases import find_matching_release, parse_episodes, release_identity
-from .sonarr import SonarrClient
+from .releases import find_matching_release, parse_episodes, parse_season, release_identity
+from .sonarr import SonarrClient, SonarrError
 from .store import Store
 
 
@@ -264,6 +264,7 @@ class Monitor:
                         downloaded = await self.sonarr.downloaded_episodes(
                             current["sonarr_series_id"],
                             current["sonarr_series_type"],
+                            parse_season(title),
                         )
                         missing = sorted(set(new_episodes_list) - downloaded)
                     if not missing:
@@ -283,16 +284,18 @@ class Monitor:
 
                     previous_hashes = None
                     delta_error = None
+                    category = None
                     if current["sonarr_series_id"] and self.qbit.configured:
                         try:
                             previous_hashes = await self.qbit.snapshot()
-                        except QbitError as exc:
+                            category = await self.sonarr.download_category()
+                        except (QbitError, SonarrError) as exc:
                             delta_error = str(exc)
                     await self.prowlarr.grab(release)
                     message = f"Недостающие серии {compact_episodes(missing)} отправлены в Prowlarr"
                     if previous_hashes is not None:
                         try:
-                            delta_message = await self.qbit.apply_delta(previous_hashes, release, missing)
+                            delta_message = await self.qbit.apply_delta(previous_hashes, release, missing, category)
                         except QbitError as exc:
                             delta_message = f"{exc}; торрент оставлен полным"
                         message = f"{message}. {delta_message}"

@@ -134,7 +134,7 @@ async def update_release(release_id: int, payload: ReleaseUpdate):
     release = store.get_release(release_id)
     if not release:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Раздача не найдена")
-    fields = payload.model_dump(exclude_none=True)
+    fields = payload.model_dump(exclude_unset=True)
     if not fields:
         return release
     if "enabled" in fields:
@@ -142,6 +142,18 @@ async def update_release(release_id: int, payload: ReleaseUpdate):
     if "interval_days" in fields:
         fields["interval_minutes"] = fields.pop("interval_days") * 1440
         fields["next_check_at"] = timestamp(utc_now() + timedelta(minutes=fields["interval_minutes"]))
+    if "sonarr_series_id" in fields:
+        series_id = fields["sonarr_series_id"]
+        if series_id is None:
+            fields["sonarr_series_title"] = None
+            fields["sonarr_series_type"] = None
+        else:
+            try:
+                series = await monitor.sonarr.get_series(series_id)
+            except SonarrError as exc:
+                raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+            fields["sonarr_series_title"] = series["title"]
+            fields["sonarr_series_type"] = series.get("seriesType", "standard")
     fields["updated_at"] = timestamp()
     return store.update_release(release_id, **fields)
 

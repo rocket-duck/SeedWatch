@@ -1,6 +1,6 @@
 import pytest
 
-from app.releases import find_matching_release, parse_episodes, release_identity
+from app.releases import find_matching_release, parse_episodes, parse_season, release_identity
 
 
 @pytest.mark.parametrize(
@@ -15,6 +15,23 @@ from app.releases import find_matching_release, parse_episodes, release_identity
 )
 def test_parse_episodes(title, expected):
     assert parse_episodes(title) == expected
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Cang Yuan Tu (The Demon Hunter) - S3E1-31 - 2026 MVO (HORIZON) 4K, SDR WEBRip 2160p - RUSSIAN", 3),
+        ("Name S01E145-E174", 1),
+        ("Боевой континент 2 (1 сезон: 145-174 серии из 174)", 1),
+        ("Name Season 2 E01-E12", 2),
+        ("Name E01-E12", None),
+        ("Name 2023-2026 WEB-DL 1080p", None),
+        ("(S1,2,3,4) Name [1-12]", None),
+        ("Name S2E05 / Season 2", 2),
+    ],
+)
+def test_parse_season(title, expected):
+    assert parse_season(title) == expected
 
 
 @pytest.mark.parametrize(

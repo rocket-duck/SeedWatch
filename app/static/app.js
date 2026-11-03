@@ -8,6 +8,12 @@ const sonarrSeriesSelect = document.querySelector('#sonarr-series');
 const settingsDialog = document.querySelector('#settings-dialog');
 const settingsForm = document.querySelector('#settings-form');
 const settingsMessage = document.querySelector('#settings-message');
+const editDialog = document.querySelector('#edit-dialog');
+const editForm = document.querySelector('#edit-form');
+const editMessage = document.querySelector('#edit-message');
+const editSeriesSelect = document.querySelector('#edit-sonarr-series');
+
+let releasesCache = [];
 
 const statusNames = {
   monitoring: 'Отслеживается',
@@ -18,14 +24,24 @@ const statusNames = {
 };
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  });
-  if (response.status === 204) return null;
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
-  return data;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(path, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+    });
+    if (response.status === 204) return null;
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+    return data;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('Превышено время ожидания ответа');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function formatDate(value) {
@@ -96,6 +112,7 @@ function renderRelease(release) {
   const actions = element('div', 'release-actions');
   actions.append(
     actionButton('Проверить сейчас', 'check', release.id),
+    actionButton('Изменить', 'edit', release.id),
     actionButton(release.enabled ? 'Поставить на паузу' : 'Возобновить', 'toggle', release.id),
     actionButton('История', 'history', release.id),
     actionButton('Удалить', 'delete', release.id, 'danger'),
@@ -107,12 +124,29 @@ function renderRelease(release) {
 async function loadReleases() {
   try {
     const releases = await api('/api/releases');
+    releasesCache = releases;
     releasesNode.replaceChildren(...releases.map(renderRelease));
     emptyNode.hidden = releases.length > 0;
   } catch (error) {
     emptyNode.hidden = false;
     emptyNode.textContent = `Не удалось загрузить список: ${error.message}`;
   }
+}
+
+function openEditDialog(release) {
+  editMessage.textContent = '';
+  editMessage.className = 'form-message';
+  document.querySelector('#edit-release-title').textContent = release.title;
+  editForm.elements.interval_days.value = Math.round(release.interval_minutes / 1440) || 1;
+  editForm.elements.search_query.value = release.search_query || '';
+  const options = [new Option('Без интеграции Sonarr', '')];
+  for (const option of sonarrSeriesSelect.options) {
+    if (option.value) options.push(new Option(option.text, option.value));
+  }
+  editSeriesSelect.replaceChildren(...options);
+  editSeriesSelect.value = release.sonarr_series_id || '';
+  editForm.dataset.id = release.id;
+  editDialog.showModal();
 }
 
 async function checkConnection(name, label) {
@@ -209,6 +243,11 @@ releasesNode.addEventListener('click', async (event) => {
     return;
   }
   if (action === 'delete' && !window.confirm('Удалить раздачу из мониторинга?')) return;
+  if (action === 'edit') {
+    const release = releasesCache.find((item) => item.id === id);
+    if (release) openEditDialog(release);
+    return;
+  }
   button.disabled = true;
   try {
     if (action === 'check') await api(`/api/releases/${id}/check`, { method: 'POST' });
@@ -281,6 +320,33 @@ settingsForm.addEventListener('submit', async (event) => {
 
 document.querySelector('#refresh').addEventListener('click', loadReleases);
 document.querySelector('#close-history').addEventListener('click', () => historyDialog.close());
+document.querySelector('#close-edit').addEventListener('click', () => editDialog.close());
+editDialog.addEventListener('click', (event) => {
+  if (event.target === editDialog) editDialog.close();
+});
+editForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = editForm.querySelector('button[type="submit"]');
+  button.disabled = true;
+  editMessage.className = 'form-message';
+  try {
+    const data = new FormData(editForm);
+    await api(`/api/releases/${editForm.dataset.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        interval_days: Number(data.get('interval_days')),
+        search_query: data.get('search_query') || null,
+        sonarr_series_id: data.get('sonarr_series_id') ? Number(data.get('sonarr_series_id')) : null,
+      }),
+    });
+    editDialog.close();
+    await loadReleases();
+  } catch (error) {
+    editMessage.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
 historyDialog.addEventListener('click', (event) => {
   if (event.target === historyDialog) historyDialog.close();
 });
@@ -289,3 +355,4 @@ loadReleases();
 checkConnections();
 loadSonarrSeries();
 setInterval(loadReleases, 15000);
+setInterval(checkConnections, 60000);

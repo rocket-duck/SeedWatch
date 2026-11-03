@@ -11,6 +11,13 @@ EPISODE_PATTERNS = (
 )
 
 
+SEASON_PATTERNS = (
+    re.compile(r"\bS(\d{1,2})\s*E\d", re.IGNORECASE),
+    re.compile(r"\bSeason\s*(\d{1,2})\b", re.IGNORECASE),
+    re.compile(r"(?<!\d)(\d{1,2})\s*сезон", re.IGNORECASE),
+)
+
+
 def extract_topic_id(url: str) -> str | None:
     try:
         topic_ids = parse_qs(urlparse(url).query).get("t", [])
@@ -62,6 +69,14 @@ def parse_episodes(title: str) -> list[int]:
                 continue
             episodes.update(range(start, end + 1))
     return sorted(episodes)
+
+
+def parse_season(title: str) -> int | None:
+    seasons = set()
+    for pattern in SEASON_PATTERNS:
+        for match in pattern.finditer(title):
+            seasons.add(int(match.group(1)))
+    return seasons.pop() if len(seasons) == 1 else None
 
 
 def episode_range(episodes: list[int]) -> str:

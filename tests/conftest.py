@@ -47,12 +47,17 @@ class MockServices:
         self.series = {
             10: {"id": 10, "title": "Show", "year": 2023, "seriesType": "anime"},
             20: {"id": 20, "title": "Other", "year": 2024, "seriesType": "standard"},
+            30: {"id": 30, "title": "Demon", "year": 2026, "seriesType": "standard"},
         }
         self.downloaded = {10: set(range(1, 174)), 20: {1}}
+        self.season_files = {
+            30: {1: set(range(1, 27)), 2: set(range(1, 37)), 3: set(range(1, 24))},
+        }
         self.torrents = []
         self.grabs = []
         self.searches = []
         self.priorities = []
+        self.categories = []
         self.logins = []
         self.qbit_auth = []
         self.auth_method = "api_key"
@@ -118,10 +123,30 @@ def handler_for(mock):
                 if series_id in mock.series:
                     return self.send_json(mock.series[series_id])
                 return self.send_json({"detail": "not found"}, 404)
-            if parsed.path == "/api/v3/episode":
-                series_id = int(parse_qs(parsed.query)["seriesId"][0])
+            if parsed.path == "/api/v3/downloadclient":
                 return self.send_json([
                     {
+                        "name": "qBittorrent",
+                        "implementation": "QBittorrent",
+                        "fields": [{"name": "tvCategory", "value": "tv-sonarr"}],
+                    }
+                ])
+            if parsed.path == "/api/v3/episode":
+                series_id = int(parse_qs(parsed.query)["seriesId"][0])
+                if series_id in mock.season_files:
+                    return self.send_json([
+                        {
+                            "seasonNumber": season,
+                            "episodeNumber": number,
+                            "absoluteEpisodeNumber": None,
+                            "hasFile": number in files,
+                        }
+                        for season, files in mock.season_files[series_id].items()
+                        for number in range(1, max(files) + 2)
+                    ])
+                return self.send_json([
+                    {
+                        "seasonNumber": 1,
                         "episodeNumber": number,
                         "absoluteEpisodeNumber": number,
                         "hasFile": number in mock.downloaded.get(series_id, set()),
@@ -165,6 +190,12 @@ def handler_for(mock):
                 if not self.qbit_authorized():
                     return self.send_json({"detail": "forbidden"}, 403)
                 mock.priorities.append(parse_qs(data))
+                return self.send_json({})
+            if parsed.path == "/api/v2/torrents/setCategory":
+                if not self.qbit_authorized():
+                    return self.send_json({"detail": "forbidden"}, 403)
+                params = parse_qs(data)
+                mock.categories.append({"hash": params["hashes"][0], "category": params["category"][0]})
                 return self.send_json({})
             return self.send_json({"detail": "not found"}, 404)
 

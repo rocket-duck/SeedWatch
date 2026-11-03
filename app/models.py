@@ -24,6 +24,16 @@ class ReleaseCreate(BaseModel):
 class ReleaseUpdate(BaseModel):
     enabled: bool | None = None
     interval_days: int | None = Field(default=None, ge=1, le=365)
+    search_query: str | None = Field(default=None, max_length=500)
+    sonarr_series_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("search_query")
+    @classmethod
+    def strip_query(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
 
 class ConnectionSettings(BaseModel):

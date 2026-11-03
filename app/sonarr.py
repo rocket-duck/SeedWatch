@@ -60,7 +60,23 @@ class SonarrClient:
         except httpx.HTTPError as exc:
             raise SonarrError(f"Sonarr недоступен: {exc}") from exc
 
-    async def downloaded_episodes(self, series_id: int, series_type: str) -> set[int]:
+    async def download_category(self) -> str | None:
+        try:
+            async with self._client() as client:
+                response = await client.get("/downloadclient")
+                self._check(response)
+                clients = response.json()
+        except httpx.HTTPError as exc:
+            raise SonarrError(f"Sonarr недоступен: {exc}") from exc
+        for client_config in clients:
+            if "qbittorrent" not in str(client_config.get("implementation", "")).lower():
+                continue
+            for field in client_config.get("fields", []):
+                if field.get("name") == "tvCategory" and field.get("value"):
+                    return str(field["value"]).strip()
+        return None
+
+    async def downloaded_episodes(self, series_id: int, series_type: str, season: int | None = None) -> set[int]:
         try:
             async with self._client() as client:
                 response = await client.get("/episode", params={"seriesId": series_id})
@@ -72,8 +88,13 @@ class SonarrClient:
         for episode in episodes:
             if not episode.get("hasFile"):
                 continue
-            number = episode.get("absoluteEpisodeNumber") if series_type == "anime" else None
-            number = number or episode.get("episodeNumber")
+            if season is not None:
+                if episode.get("seasonNumber") != season:
+                    continue
+                number = episode.get("episodeNumber")
+            else:
+                number = episode.get("absoluteEpisodeNumber") if series_type == "anime" else None
+                number = number or episode.get("episodeNumber")
             if number is not None:
                 downloaded.add(number)
         return downloaded

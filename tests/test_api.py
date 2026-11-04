@@ -347,6 +347,32 @@ def test_duplicate_add_reports_conflict(client, configure, services, monkeypatch
     assert "уже добавлена" in response.json()["detail"]
 
 
+def test_delta_skips_files_with_absolute_episode_markers(client, configure, services):
+    configure()
+    services.releases.append({
+        "url": "https://kinozal.guru/details.php?id=888",
+        "title": "Tunshi Xingkong (Swallowed Star) 2026 MVO WEBRip 1080p - RUSSIAN",
+        "indexerId": 5,
+        "hash": "sw888",
+        "files": [
+            {"index": 0, "name": "Tunshi.Xingkong.Ona.S05e33-E241 - 1080.mp4"},
+            {"index": 1, "name": "Tunshi.Xingkong.Ona.S05e34-E242 - 1080.mp4"},
+            {"index": 2, "name": "Tunshi.Xingkong.Ona.S05e01-E209 - 1080.mp4"},
+            {"index": 3, "name": "Tunshi.Xingkong.Ona.S05e11-film - 1080.mp4"},
+        ],
+    })
+    services.fs_private_pages["https://kinozal.guru/details.php?id=888"] = (
+        "Пожиратель звёзд (5 сезон: 1-34 серии из 52) / Tunshi Xingkong / 2026 WEBRip (1080p)"
+    )
+    services.fs_pages_raw["https://kinozal.guru/login.php"] = KINOZAL_LOGIN_HTML
+    configure(flaresolverr_url=services.base_url, kinozal_username="ku", kinozal_password="kp")
+    release = add_release(client, services, index=3, series_id=30, search_query="Swallowed Star")
+    assert release["last_status"] == "grabbed"
+    assert services.priorities[0]["id"] == ["2|3"]
+    history = client.get(f"/api/releases/{release['id']}/history").json()
+    assert "файлов пропущено: 2" in history[0]["message"]
+
+
 def test_aniliberty_url_is_supported(client, configure, services):
     release = add_release(client, services, index=2)
     assert release["last_status"] == "grabbed"

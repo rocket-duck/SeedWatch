@@ -3,8 +3,8 @@ from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse
 
 
 EPISODE_PATTERNS = (
-    re.compile(r"\bS\d{1,2}E(\d{1,4})(?:\s*[-–—]\s*(?:S\d{1,2}E|E)?(\d{1,4}))?", re.IGNORECASE),
-    re.compile(r"\bE(?:p(?:isode)?)?\.?\s*(\d{1,4})(?:\s*[-–—]\s*(?:E(?:p(?:isode)?)?\.?\s*)?(\d{1,4}))?", re.IGNORECASE),
+    re.compile(r"\bS\d{1,2}E(\d{1,4})(?:\s*[-–—]\s*(\d{1,4}))?", re.IGNORECASE),
+    re.compile(r"\bE(?:p(?:isode)?)?\.?\s*(\d{1,4})(?:\s*[-–—]\s*(\d{1,4}))?", re.IGNORECASE),
     re.compile(r"(?<!\d)(\d{1,4})\s*[-–—]\s*(\d{1,4})\s*(?=сери[ия])", re.IGNORECASE),
     re.compile(r"(?<![\d-])(\d{1,4})\s*сери[ия]", re.IGNORECASE),
     re.compile(r"\[(\d{1,4})\s*[-–—]\s*(\d{1,4})\]"),

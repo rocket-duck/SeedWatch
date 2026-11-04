@@ -8,8 +8,11 @@ from app.releases import find_matching_release, parse_episodes, parse_season, re
     [
         ("Боевой континент 2 (1 сезон: 145-174 серии из 174)", list(range(145, 175))),
         ("Пожиратель звёзд (Поглощаю звезду) (5 сезон: 1-39 серии из 52 + Фильм) / Tunshi Xingkong (Swallowed Star) / 2026 / ЛМ / WEBRip (1080p)", list(range(1, 40))),
-        ("Name S01E145-E174", list(range(145, 175))),
-        ("Name E01-E12", list(range(1, 13))),
+        ("Name S01E145-174", list(range(145, 175))),
+        ("Name S05E01-E209", [1, 209]),
+        ("Name S05E11-film", [11]),
+        ("Name E01-E12", [1, 12]),
+        ("Name E01-12", list(range(1, 13))),
         ("Name [AVC][1-12]", list(range(1, 13))),
         ("Name 2023-2026 WEB-DL 1080p", []),
     ],

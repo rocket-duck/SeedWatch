@@ -25,7 +25,7 @@ const statusNames = {
 
 async function api(path, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), options.timeout ?? 15000);
   try {
     const response = await fetch(path, {
       ...options,
@@ -37,7 +37,11 @@ async function api(path, options = {}) {
     if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
     return data;
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('Превышено время ожидания ответа');
+    if (error.name === 'AbortError') {
+      throw new Error(options.timeout
+        ? 'Превышено время ожидания ответа. Проверьте список раздач — операция могла завершиться на сервере.'
+        : 'Превышено время ожидания ответа');
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -195,6 +199,7 @@ form.addEventListener('submit', async (event) => {
   try {
     await api('/api/releases', {
       method: 'POST',
+      timeout: 300000,
       body: JSON.stringify({
         url: data.get('url'),
         interval_days: Number(data.get('interval_days')),
@@ -250,7 +255,7 @@ releasesNode.addEventListener('click', async (event) => {
   }
   button.disabled = true;
   try {
-    if (action === 'check') await api(`/api/releases/${id}/check`, { method: 'POST' });
+    if (action === 'check') await api(`/api/releases/${id}/check`, { method: 'POST', timeout: 300000 });
     if (action === 'delete') await api(`/api/releases/${id}`, { method: 'DELETE' });
     if (action === 'toggle') {
       const card = button.closest('.release');

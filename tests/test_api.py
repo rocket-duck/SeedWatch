@@ -399,6 +399,12 @@ def test_connection_checks_retry_and_time_out(client):
     assert "setInterval(checkConnections" in script
 
 
+def test_long_operations_use_extended_timeouts(client):
+    script = client.get("/static/app.js").text
+    assert "options.timeout" in script
+    assert "300000" in script
+
+
 def test_urls_without_scheme_are_normalized(client, services):
     address = services.base_url.removeprefix("http://")
     response = client.put("/api/settings", json={

@@ -211,7 +211,7 @@ def handler_for(mock):
                 cmd = payload.get("cmd")
                 session = payload.get("session", "")
                 if cmd == "sessions.create":
-                    return self.send_json({"status": "ok", "solution": {"session": "mock-fs"}})
+                    return self.send_json({"status": "ok", "session": "mock-fs"})
                 if cmd == "request.get":
                     html = mock.fs_title_for(payload["url"], session)
                     return self.send_json({"status": "ok", "solution": {"response": html}})

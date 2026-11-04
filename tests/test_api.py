@@ -325,6 +325,28 @@ def test_tracker_settings_are_persisted_and_masked(client, configure):
     assert main.store.get_settings()["kinozal_password"] == "kz_pass"
 
 
+def test_duplicate_add_reports_conflict(client, configure, services, monkeypatch):
+    import sqlite3
+
+    configure()
+    add_release(client, services, series_id=10)
+    monkeypatch.setattr(main.store, "get_by_url", lambda url: None)
+
+    def boom(data):
+        raise sqlite3.IntegrityError("UNIQUE constraint failed: releases.url")
+
+    monkeypatch.setattr(main.store, "create_release", boom)
+    item = services.release(0)
+    response = client.post("/api/releases", json={
+        "url": item["url"],
+        "interval_days": 3,
+        "search_query": "Show",
+        "sonarr_series_id": 10,
+    })
+    assert response.status_code == 400
+    assert "уже добавлена" in response.json()["detail"]
+
+
 def test_aniliberty_url_is_supported(client, configure, services):
     release = add_release(client, services, index=2)
     assert release["last_status"] == "grabbed"

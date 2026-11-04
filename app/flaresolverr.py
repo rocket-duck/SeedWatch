@@ -33,7 +33,10 @@ class FlareSolverrClient:
     async def _session(self) -> str:
         if not self.session:
             data = await self._command({"cmd": "sessions.create"})
-            self.session = data["solution"]["session"]
+            session = data.get("session") or (data.get("solution") or {}).get("session")
+            if not session:
+                raise FlareSolverrError("FlareSolverr не вернул идентификатор сессии")
+            self.session = session
         return self.session
 
     async def _run(self, payload: dict) -> dict:

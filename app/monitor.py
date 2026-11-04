@@ -1,5 +1,6 @@
 import asyncio
 import re
+import sqlite3
 from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
@@ -300,28 +301,31 @@ class Monitor:
         if not title:
             raise MonitorError("Prowlarr вернул раздачу без названия")
         now = utc_now()
-        return self.store.create_release(
-            {
-                "url": url,
-                "topic_id": identity,
-                "search_query": search_query,
-                "topic_title": topic_title,
-                "title": title,
-                "episodes": parse_episodes(title),
-                "interval_minutes": interval_minutes,
-                "enabled": True,
-                "last_status": "monitoring",
-                "last_error": None,
-                "last_checked_at": timestamp(now),
-                "last_grabbed_at": None,
-                "next_check_at": timestamp(now + timedelta(minutes=interval_minutes)),
-                "created_at": timestamp(now),
-                "updated_at": timestamp(now),
-                "sonarr_series_id": series["id"] if series else None,
-                "sonarr_series_title": series["title"] if series else None,
-                "sonarr_series_type": series.get("seriesType", "standard") if series else None,
-            }
-        )
+        try:
+            return self.store.create_release(
+                {
+                    "url": url,
+                    "topic_id": identity,
+                    "search_query": search_query,
+                    "topic_title": topic_title,
+                    "title": title,
+                    "episodes": parse_episodes(title),
+                    "interval_minutes": interval_minutes,
+                    "enabled": True,
+                    "last_status": "monitoring",
+                    "last_error": None,
+                    "last_checked_at": timestamp(now),
+                    "last_grabbed_at": None,
+                    "next_check_at": timestamp(now + timedelta(minutes=interval_minutes)),
+                    "created_at": timestamp(now),
+                    "updated_at": timestamp(now),
+                    "sonarr_series_id": series["id"] if series else None,
+                    "sonarr_series_title": series["title"] if series else None,
+                    "sonarr_series_type": series.get("seriesType", "standard") if series else None,
+                }
+            )
+        except sqlite3.IntegrityError as exc:
+            raise MonitorError("Эта раздача уже добавлена") from exc
 
     async def check_release(self, release_id: int, initial: bool = False) -> dict | None:
         async with self.locks[release_id]:

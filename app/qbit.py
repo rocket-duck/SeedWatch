@@ -8,9 +8,6 @@ import httpx
 from .releases import parse_episodes
 
 
-VIDEO_EXTENSIONS = {".avi", ".m2ts", ".mkv", ".mp4", ".ts"}
-
-
 class QbitError(RuntimeError):
     pass
 
@@ -141,27 +138,27 @@ class QbitClient:
         for file in files:
             path = PurePosixPath(file["name"])
             episodes = self._file_episodes(path.name)
-            if not episodes:
-                if path.suffix.lower() in VIDEO_EXTENSIONS:
-                    return f"Не удалось распознать серии в файле {path.name}; торрент оставлен полным"
-                continue
             wanted = episodes & missing_episodes
             if wanted:
                 matched.update(wanted)
-            else:
-                if "index" not in file:
-                    return "qBittorrent не вернул индексы файлов; торрент оставлен полным"
-                skip_ids.append(str(file["index"]))
-        if matched != missing_episodes:
-            missing = ", ".join(map(str, sorted(missing_episodes - matched)))
-            return f"Не найдены файлы для серий {missing}; торрент оставлен полным"
+                continue
+            if "index" not in file:
+                return "qBittorrent не вернул индексы файлов; торрент оставлен полным"
+            skip_ids.append(str(file["index"]))
+        if not matched:
+            missing = ", ".join(map(str, sorted(missing_episodes)))
+            return f"Не удалось сопоставить файлы с сериями {missing}; торрент оставлен полным"
         if skip_ids:
             response = await client.post(
                 "/torrents/filePrio",
                 data={"hash": torrent_hash, "id": "|".join(skip_ids), "priority": 0},
             )
             self._check(response)
-        return f"В qBittorrent отключены уже скачанные серии; файлов пропущено: {len(skip_ids)}"
+        message = f"В qBittorrent отключены уже скачанные серии; файлов пропущено: {len(skip_ids)}"
+        if matched != missing_episodes:
+            missing = ", ".join(map(str, sorted(missing_episodes - matched)))
+            message = f"Не найдены файлы для серий {missing}; файлов пропущено: {len(skip_ids)}"
+        return message
 
     @staticmethod
     def _file_episodes(filename: str) -> set[int]:
@@ -170,5 +167,5 @@ class QbitClient:
             return episodes
         match = re.match(r"^(\d{1,4})(?:\D|$)", filename)
         if not match:
-            match = re.search(r"\[(\d{1,4})\]", filename)
+            match = re.search(r"[([](\d{1,4})[\])]", filename)
         return {int(match.group(1))} if match else set()

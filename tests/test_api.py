@@ -373,6 +373,57 @@ def test_delta_skips_files_with_absolute_episode_markers(client, configure, serv
     assert "файлов пропущено: 2" in history[0]["message"]
 
 
+def test_delta_skips_unrecognized_files_when_episodes_match(client, configure, services):
+    configure()
+    services.releases.append({
+        "url": "https://kinozal.guru/details.php?id=901",
+        "title": "Zhe Tian 2026 WEBDL 1080p - RUSSIAN",
+        "indexerId": 7,
+        "hash": "zt901",
+        "files": [
+            {"index": 0, "name": "Zhe Tian (33) серия.mkv"},
+            {"index": 1, "name": "Zhe Tian (34) серия.mkv"},
+            {"index": 2, "name": "Shrouding the Heavens (156) фильм Битва.mp4"},
+            {"index": 3, "name": "Zhe Tian (32) серия.mkv"},
+        ],
+    })
+    services.fs_private_pages["https://kinozal.guru/details.php?id=901"] = (
+        "Окутывая небеса (5 сезон: 1-34 серии из 52 + Фильм) / Zhe Tian / 2023-2026 WEB-DL (1080p)"
+    )
+    services.fs_pages_raw["https://kinozal.guru/login.php"] = KINOZAL_LOGIN_HTML
+    configure(flaresolverr_url=services.base_url, kinozal_username="ku", kinozal_password="kp")
+    release = add_release(client, services, index=3, series_id=30, search_query="Zhe Tian")
+    assert release["last_status"] == "grabbed"
+    assert services.priorities[0]["id"] == ["2|3"]
+    history = client.get(f"/api/releases/{release['id']}/history").json()
+    assert "файлов пропущено: 2" in history[0]["message"]
+    assert "Не найдены файлы" not in history[0]["message"]
+
+
+def test_delta_applies_partial_skip_with_warning(client, configure, services):
+    configure()
+    services.releases.append({
+        "url": "https://kinozal.guru/details.php?id=902",
+        "title": "Zhe Tian 2026 WEBDL 1080p - RUSSIAN",
+        "indexerId": 7,
+        "hash": "zt902",
+        "files": [
+            {"index": 0, "name": "Zhe Tian (33) серия.mkv"},
+            {"index": 1, "name": "Shrouding the Heavens (156) фильм Битва.mp4"},
+        ],
+    })
+    services.fs_private_pages["https://kinozal.guru/details.php?id=902"] = (
+        "Окутывая небеса (5 сезон: 1-34 серии из 52 + Фильм) / Zhe Tian / 2023-2026 WEB-DL (1080p)"
+    )
+    services.fs_pages_raw["https://kinozal.guru/login.php"] = KINOZAL_LOGIN_HTML
+    configure(flaresolverr_url=services.base_url, kinozal_username="ku", kinozal_password="kp")
+    release = add_release(client, services, index=3, series_id=30, search_query="Zhe Tian")
+    assert release["last_status"] == "grabbed"
+    assert services.priorities[0]["id"] == ["1"]
+    history = client.get(f"/api/releases/{release['id']}/history").json()
+    assert "Не найдены файлы для серий 34" in history[0]["message"]
+
+
 def test_aniliberty_url_is_supported(client, configure, services):
     release = add_release(client, services, index=2)
     assert release["last_status"] == "grabbed"

@@ -74,7 +74,7 @@ def test_immediate_download_without_sonarr(client, configure, services):
 
 def test_unrecognized_video_falls_back_to_full_torrent(client, configure, services):
     configure()
-    services.release(1)["files"] = [{"index": 0, "name": "Other 02.mkv"}]
+    services.release(1)["files"] = [{"index": 0, "name": "Other bonus.mkv"}]
     release = add_release(client, services, index=1, series_id=20)
     assert release["last_status"] == "grabbed"
     assert services.priorities == []
@@ -422,6 +422,37 @@ def test_delta_applies_partial_skip_with_warning(client, configure, services):
     assert services.priorities[0]["id"] == ["1"]
     history = client.get(f"/api/releases/{release['id']}/history").json()
     assert "Не найдены файлы для серий 34" in history[0]["message"]
+
+
+def test_delta_recognizes_bare_numbers_in_file_names(client, configure, services):
+    configure()
+    episode_181 = "[Anistar.org] Shrouding the Heavens [TV-1] - 181 [1080p].mp4"
+    episode_182 = "[Anistar.org] Shrouding the Heavens [TV-1] - 182 [1080p].mp4"
+    old_episode = "[Anistar.org] Shrouding the Heavens [TV-1] - 001 [1080p].mkv"
+    movie = "Shrouding the Heavens (156) фильм Битва.mp4"
+    services.releases.append({
+        "url": "https://kinozal.guru/details.php?id=903",
+        "title": "Zhe Tian 2023-2026 WEBDL 1080p - RUSSIAN",
+        "indexerId": 7,
+        "hash": "zt903",
+        "files": [
+            {"index": 0, "name": episode_181},
+            {"index": 1, "name": episode_182},
+            {"index": 2, "name": old_episode},
+            {"index": 3, "name": movie},
+        ],
+    })
+    services.fs_private_pages["https://kinozal.guru/details.php?id=903"] = (
+        "Окутывая небеса (5 сезон: 181-182 серии из 187 + Фильм) / Zhe Tian / 2023-2026 WEB-DL (1080p)"
+    )
+    services.fs_pages_raw["https://kinozal.guru/login.php"] = KINOZAL_LOGIN_HTML
+    configure(flaresolverr_url=services.base_url, kinozal_username="ku", kinozal_password="kp")
+    release = add_release(client, services, index=3, series_id=30, search_query="Zhe Tian")
+    assert release["last_status"] == "grabbed"
+    assert services.priorities[0]["id"] == ["2|3"]
+    history = client.get(f"/api/releases/{release['id']}/history").json()
+    assert "файлов пропущено: 2" in history[0]["message"]
+    assert "Не найдены файлы" not in history[0]["message"]
 
 
 def test_aniliberty_url_is_supported(client, configure, services):

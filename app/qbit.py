@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 
 import httpx
 
-from .releases import parse_episodes
+from .releases import RESOLUTIONS, parse_episodes
 
 
 class QbitError(RuntimeError):
@@ -166,6 +166,14 @@ class QbitClient:
         if episodes:
             return episodes
         match = re.match(r"^(\d{1,4})(?:\D|$)", filename)
-        if not match:
-            match = re.search(r"[([](\d{1,4})[\])]", filename)
-        return {int(match.group(1))} if match else set()
+        if match:
+            return {int(match.group(1))}
+        match = re.search(r"[([](\d{1,4})[\])]", filename)
+        if match:
+            return {int(match.group(1))}
+        candidates = {
+            int(number)
+            for number in re.findall(r"\b(\d{1,4})\b", filename)
+            if int(number) not in RESOLUTIONS and not 1900 <= int(number) <= 2099
+        }
+        return {max(candidates)} if candidates else set()

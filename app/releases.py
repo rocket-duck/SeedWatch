@@ -11,6 +11,9 @@ EPISODE_PATTERNS = (
 )
 
 
+RESOLUTIONS = {480, 540, 576, 720, 960, 1080, 1440, 2160, 4320}
+
+
 SEASON_PATTERNS = (
     re.compile(r"\bS(\d{1,2})\s*E\d", re.IGNORECASE),
     re.compile(r"\bSeason\s*(\d{1,2})\b", re.IGNORECASE),
@@ -65,6 +68,8 @@ def parse_episodes(title: str) -> list[int]:
         for match in pattern.finditer(title):
             start = int(match.group(1))
             end = int(match.group(2)) if match.lastindex and match.lastindex >= 2 and match.group(2) else start
+            if end != start and (end in RESOLUTIONS or 1900 <= end <= 2099):
+                end = start
             if end < start or end - start > 2000:
                 continue
             episodes.update(range(start, end + 1))

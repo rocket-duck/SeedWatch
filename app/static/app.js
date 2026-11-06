@@ -155,7 +155,7 @@ function openEditDialog(release) {
   document.querySelector('#edit-release-title').textContent = release.title;
   editForm.elements.interval_days.value = Math.round(release.interval_minutes / 1440) || 1;
   editForm.elements.search_query.value = release.search_query || '';
-  document.querySelector('#edit-search-query-field').hidden = release.source !== 'anistar';
+  document.querySelector('#edit-search-query-field').hidden = release.source === 'anistar';
   const options = [new Option('Без интеграции Sonarr', '')];
   for (const option of sonarrSeriesSelect.options) {
     if (option.value) options.push(new Option(option.text, option.value));

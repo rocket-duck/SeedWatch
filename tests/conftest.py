@@ -53,6 +53,7 @@ class MockServices:
         self.season_files = {
             30: {1: set(range(1, 27)), 2: set(range(1, 37)), 3: set(range(1, 24)), 5: set(range(1, 33))},
         }
+        self.custom_episodes = {}
         self.page_titles = {}
         self.fs_pages_raw = {}
         self.fs_private_pages = {}
@@ -165,6 +166,8 @@ def handler_for(mock):
                 ])
             if parsed.path == "/api/v3/episode":
                 series_id = int(parse_qs(parsed.query)["seriesId"][0])
+                if series_id in mock.custom_episodes:
+                    return self.send_json(mock.custom_episodes[series_id])
                 if series_id in mock.season_files:
                     return self.send_json([
                         {

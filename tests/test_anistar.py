@@ -1,6 +1,9 @@
+import asyncio
 from pathlib import Path
 
 import pytest
+
+from app.sonarr import SonarrClient
 
 import app.anistar
 from app.anistar import (
@@ -240,3 +243,20 @@ def test_store_defaults(tmp_path):
     stored = store.get_release(release["id"])
     assert stored["source"] == "prowlarr"
     assert stored["known_torrents"] == []
+
+
+def test_force_absolute_uses_absolute_for_standard(services):
+    services.custom_episodes[60] = [
+        {"seasonNumber": 2, "episodeNumber": 5, "absoluteEpisodeNumber": 91, "hasFile": True},
+        {"seasonNumber": 2, "episodeNumber": 6, "absoluteEpisodeNumber": 92, "hasFile": False},
+    ]
+    sonarr = SonarrClient(services.base_url, "sonarr_secret", 5)
+
+    async def run():
+        forced = await sonarr.downloaded_episodes(60, "standard", force_absolute=True)
+        default = await sonarr.downloaded_episodes(60, "standard")
+        return forced, default
+
+    forced, default = asyncio.run(run())
+    assert forced == {91}
+    assert default == {5}

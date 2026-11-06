@@ -34,7 +34,7 @@ def series_id_from_url(url: str) -> str | None:
 
 
 def decode_page(content: bytes) -> str:
-    return content.decode("cp1251")
+    return content.decode("cp1251", errors="replace")
 
 
 def parse_series_page(html: str) -> dict:

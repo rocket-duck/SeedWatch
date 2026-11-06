@@ -266,9 +266,10 @@ releasesNode.addEventListener('click', async (event) => {
       }
       historyContent.replaceChildren(...history.map((item) => {
         const wrapper = element('div', 'history-item');
+        const lines = item.message.split('; ');
         wrapper.append(
           element('small', '', `${formatDate(item.created_at)} · ${statusNames[item.status] || item.status}`),
-          element('p', '', item.message),
+          ...lines.map((line) => element('p', '', line)),
           element('div', 'history-title', item.title),
         );
         return wrapper;

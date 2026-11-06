@@ -104,6 +104,7 @@ dialog { width: min(680px, calc(100% - 32px)); max-height: 80vh; padding: 24px; 
 dialog::backdrop { background: #000a; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; }
 .icon-button { min-width: 38px; padding: 0; background: #21262d; font-size: 24px; }
+#history-content { max-height: calc(80vh - 90px); overflow-y: auto; }
 .history-item { padding: 15px 0; border-top: 1px solid var(--border); }
 .history-item p { margin-bottom: 6px; line-height: 1.45; }
 .history-item small { color: var(--muted); }

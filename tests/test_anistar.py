@@ -11,6 +11,7 @@ from app.anistar import (
     series_id_from_url,
     voice_tier,
 )
+from app.store import Store
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -190,3 +191,52 @@ def test_downloaded_subtracted_and_pack_covers_rest():
     assert pack_processed["grabbed"] is False
     single_processed = next(p for p in result2["processed"] if p["id"] == 201)
     assert single_processed["grabbed"] is True
+
+
+def release_payload(**overrides):
+    data = {
+        "url": "https://anistar.org/8883-x.html",
+        "topic_id": "8883",
+        "search_query": None,
+        "topic_title": None,
+        "title": "Тестовая раздача [01 из 12]",
+        "episodes": [1],
+        "interval_minutes": 60,
+        "enabled": True,
+        "last_status": "monitoring",
+        "last_error": None,
+        "last_checked_at": "2026-11-06T00:00:00",
+        "last_grabbed_at": None,
+        "next_check_at": "2026-11-06T01:00:00",
+        "created_at": "2026-11-06T00:00:00",
+        "updated_at": "2026-11-06T00:00:00",
+        "sonarr_series_id": None,
+        "sonarr_series_title": None,
+        "sonarr_series_type": None,
+    }
+    data.update(overrides)
+    return data
+
+
+def test_store_anistar_roundtrip(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.init()
+    known = [{"id": 1, "episodes": [5], "comment": "", "processed": True, "grabbed": True}]
+    release = store.create_release(release_payload(source="anistar", known_torrents=known))
+    stored = store.get_release(release["id"])
+    assert stored["source"] == "anistar"
+    assert stored["known_torrents"] == known
+
+    new_known = [{"id": 2, "episodes": [6], "comment": "Многоголосая озвучка", "processed": False, "grabbed": True}]
+    updated = store.update_release(release["id"], known_torrents=new_known)
+    assert updated["known_torrents"] == new_known
+    assert updated["source"] == "anistar"
+
+
+def test_store_defaults(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.init()
+    release = store.create_release(release_payload())
+    stored = store.get_release(release["id"])
+    assert stored["source"] == "prowlarr"
+    assert stored["known_torrents"] == []

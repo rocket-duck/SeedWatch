@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS releases (
     updated_at TEXT NOT NULL,
     sonarr_series_id INTEGER,
     sonarr_series_title TEXT,
-    sonarr_series_type TEXT
+    sonarr_series_type TEXT,
+    source TEXT NOT NULL DEFAULT 'prowlarr',
+    known_torrents TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -74,6 +76,8 @@ class Store:
                 "sonarr_series_id": "INTEGER",
                 "sonarr_series_title": "TEXT",
                 "sonarr_series_type": "TEXT",
+                "source": "TEXT NOT NULL DEFAULT 'prowlarr'",
+                "known_torrents": "TEXT NOT NULL DEFAULT '[]'",
             }
             for name, definition in migrations.items():
                 if name not in columns:
@@ -86,6 +90,7 @@ class Store:
         release = dict(row)
         release["enabled"] = bool(release["enabled"])
         release["episodes"] = json.loads(release["episodes"])
+        release["known_torrents"] = json.loads(release["known_torrents"])
         return release
 
     def list_releases(self) -> list[dict]:
@@ -119,15 +124,23 @@ class Store:
                     url, topic_id, search_query, topic_title, title, episodes,
                     interval_minutes, enabled, last_status, last_error,
                     last_checked_at, last_grabbed_at, next_check_at, created_at, updated_at,
-                    sonarr_series_id, sonarr_series_title, sonarr_series_type
+                    sonarr_series_id, sonarr_series_title, sonarr_series_type,
+                    source, known_torrents
                 ) VALUES (
                     :url, :topic_id, :search_query, :topic_title, :title, :episodes,
                     :interval_minutes, :enabled, :last_status, :last_error,
                     :last_checked_at, :last_grabbed_at, :next_check_at, :created_at, :updated_at,
-                    :sonarr_series_id, :sonarr_series_title, :sonarr_series_type
+                    :sonarr_series_id, :sonarr_series_title, :sonarr_series_type,
+                    :source, :known_torrents
                 )
                 """,
-                {**data, "episodes": json.dumps(data["episodes"]), "enabled": int(data["enabled"])},
+                {
+                    **data,
+                    "episodes": json.dumps(data["episodes"]),
+                    "enabled": int(data["enabled"]),
+                    "source": data.get("source", "prowlarr"),
+                    "known_torrents": json.dumps(data.get("known_torrents", [])),
+                },
             )
             release_id = cursor.lastrowid
         return self.get_release(release_id)
@@ -138,12 +151,15 @@ class Store:
             "enabled", "last_status", "last_error", "last_checked_at",
             "last_grabbed_at", "next_check_at", "updated_at",
             "sonarr_series_id", "sonarr_series_title", "sonarr_series_type",
+            "source", "known_torrents",
         }
         unknown = set(fields) - allowed
         if unknown:
             raise ValueError(f"Unknown release fields: {unknown}")
         if "episodes" in fields:
             fields["episodes"] = json.dumps(fields["episodes"])
+        if "known_torrents" in fields:
+            fields["known_torrents"] = json.dumps(fields["known_torrents"])
         if "enabled" in fields:
             fields["enabled"] = int(fields["enabled"])
         assignments = ", ".join(f"{name} = :{name}" for name in fields)

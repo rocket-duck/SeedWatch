@@ -107,6 +107,18 @@ async def sonarr_series():
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
 
 
+@app.get("/api/sonarr/series/{series_id}")
+async def sonarr_series_detail(series_id: int):
+    try:
+        series = await monitor.sonarr.get_series(series_id)
+        downloaded = await monitor.sonarr.downloaded_episodes(
+            series_id, series.get("seriesType", "anime"), force_absolute=True
+        )
+    except SonarrError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return {**series, "downloaded_count": len(downloaded)}
+
+
 @app.get("/api/releases")
 async def list_releases():
     return store.list_releases()

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 import app.anistar as anistar_module
+import app.main as main
 from app.anistar import parse_series_page, select_torrents
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -87,6 +88,43 @@ def add_jade(client, services, series_id=None):
 def history_messages(client, release_id):
     history = client.get(f"/api/releases/{release_id}/history").json()
     return [entry["message"] for entry in history]
+
+
+def test_sonarr_series_detail_reports_downloaded_count(client, anistar):
+    response = client.get("/api/sonarr/series/10")
+
+    assert response.status_code == 200, response.text
+    series = response.json()
+    assert series["id"] == 10
+    assert series["seriesType"] == "anime"
+    assert series["downloaded_count"] == 173
+
+
+def test_sonarr_series_detail_empty_series(client, anistar):
+    response = client.get("/api/sonarr/series/40")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["downloaded_count"] == 0
+
+
+def test_anistar_duplicate_add_reports_conflict(client, anistar, monkeypatch):
+    import sqlite3
+
+    add_jade(client, anistar)
+    monkeypatch.setattr(main.store, "get_by_url", lambda url: None)
+
+    def boom(data):
+        raise sqlite3.IntegrityError("UNIQUE constraint failed: releases.url")
+
+    monkeypatch.setattr(main.store, "create_release", boom)
+
+    response = client.post("/api/releases", json={
+        "url": f"{anistar.base_url}{JADE_PATH}",
+        "interval_days": 1,
+    })
+
+    assert response.status_code == 400
+    assert "уже добавлена" in response.json()["detail"]
 
 
 def test_add_baseline_no_sonarr(client, anistar):

@@ -505,30 +505,33 @@ class Monitor:
             if selection["selected"] and not self.qbit.configured:
                 raise MonitorError("QBIT_URL не задан")
         now = utc_now()
-        release = self.store.create_release(
-            {
-                "url": url,
-                "topic_id": series_id_from_url(url) or url,
-                "search_query": None,
-                "topic_title": None,
-                "title": page["title"],
-                "episodes": sorted({ep for torrent in torrents for ep in torrent["episodes"]}),
-                "interval_minutes": interval_minutes,
-                "enabled": True,
-                "last_status": "monitoring",
-                "last_error": None,
-                "last_checked_at": timestamp(now),
-                "last_grabbed_at": None,
-                "next_check_at": timestamp(now + timedelta(minutes=interval_minutes)),
-                "created_at": timestamp(now),
-                "updated_at": timestamp(now),
-                "sonarr_series_id": series["id"] if series else None,
-                "sonarr_series_title": series["title"] if series else None,
-                "sonarr_series_type": series.get("seriesType", "anime") if series else None,
-                "source": "anistar",
-                "known_torrents": known,
-            }
-        )
+        try:
+            release = self.store.create_release(
+                {
+                    "url": url,
+                    "topic_id": series_id_from_url(url) or url,
+                    "search_query": None,
+                    "topic_title": None,
+                    "title": page["title"],
+                    "episodes": sorted({ep for torrent in torrents for ep in torrent["episodes"]}),
+                    "interval_minutes": interval_minutes,
+                    "enabled": True,
+                    "last_status": "monitoring",
+                    "last_error": None,
+                    "last_checked_at": timestamp(now),
+                    "last_grabbed_at": None,
+                    "next_check_at": timestamp(now + timedelta(minutes=interval_minutes)),
+                    "created_at": timestamp(now),
+                    "updated_at": timestamp(now),
+                    "sonarr_series_id": series["id"] if series else None,
+                    "sonarr_series_title": series["title"] if series else None,
+                    "sonarr_series_type": series.get("seriesType", "anime") if series else None,
+                    "source": "anistar",
+                    "known_torrents": known,
+                }
+            )
+        except sqlite3.IntegrityError as exc:
+            raise MonitorError("Эта раздача уже добавлена") from exc
         if selection and selection["selected"]:
             category = await self._anistar_category()
             await self._process_anistar_selection(

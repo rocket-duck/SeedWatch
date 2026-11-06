@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from app.qbit import QbitClient
 from app.sonarr import SonarrClient
 
 import app.anistar
@@ -243,6 +244,26 @@ def test_store_defaults(tmp_path):
     stored = store.get_release(release["id"])
     assert stored["source"] == "prowlarr"
     assert stored["known_torrents"] == []
+
+
+def test_add_torrent_posts_multipart(services):
+    qbit = QbitClient(
+        base_url=services.base_url,
+        username="admin",
+        password="secret",
+        timeout=5,
+        metadata_timeout=2,
+        auth_method="api_key",
+        api_key=services.api_key,
+    )
+
+    async def run():
+        await qbit.add_torrent(b"d8:announce9:test", "anistar_1.torrent", "tv-sonarr")
+
+    asyncio.run(run())
+    body = services.added_torrents[-1]
+    assert b"d8:announce9:test" in body
+    assert b"tv-sonarr" in body
 
 
 def test_force_absolute_uses_absolute_for_standard(services):

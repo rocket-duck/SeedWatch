@@ -66,6 +66,20 @@ class QbitClient:
         except httpx.HTTPError as exc:
             raise QbitError(f"qBittorrent недоступен: {exc}") from exc
 
+    async def add_torrent(self, content: bytes, filename: str, category: str | None = None) -> None:
+        try:
+            async with self._client() as client:
+                await self._login(client)
+                data = {"category": category} if category else {}
+                response = await client.post(
+                    "/torrents/add",
+                    files={"torrents": (filename, content)},
+                    data=data,
+                )
+                self._check(response)
+        except httpx.HTTPError as exc:
+            raise QbitError(f"qBittorrent недоступен: {exc}") from exc
+
     async def snapshot(self) -> set[str]:
         try:
             async with self._client() as client:

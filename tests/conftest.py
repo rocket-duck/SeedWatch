@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -67,6 +68,9 @@ class MockServices:
         self.categories = []
         self.logins = []
         self.qbit_auth = []
+        self.anistar_pages = {}
+        self.anistar_torrents = {}
+        self.added_torrents = []
         self.auth_method = "api_key"
         self.api_key = "qbt_test_key"
         self.base_url = ""
@@ -188,6 +192,28 @@ def handler_for(mock):
                     }
                     for number in range(1, 201)
                 ])
+            if re.fullmatch(r"/\d+-.*\.html", parsed.path):
+                url = f"{mock.base_url}{parsed.path}"
+                if url in mock.anistar_pages:
+                    body = mock.anistar_pages[url]
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=windows-1251")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                return self.send_json({"detail": "not found"}, 404)
+            if parsed.path == "/engine/gettorrent.php":
+                torrent_id = int(parse_qs(parsed.query)["id"][0])
+                if torrent_id in mock.anistar_torrents:
+                    body = mock.anistar_torrents[torrent_id]
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/x-bittorrent")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                return self.send_json({"detail": "not found"}, 404)
             if parsed.path.startswith("/api/v2/"):
                 if not self.qbit_authorized():
                     return self.send_json({"detail": "forbidden"}, 403)
@@ -208,6 +234,11 @@ def handler_for(mock):
 
         def do_POST(self):
             parsed = urlparse(self.path)
+            if parsed.path == "/api/v2/torrents/add":
+                if not self.qbit_authorized():
+                    return self.send_json({"detail": "forbidden"}, 403)
+                mock.added_torrents.append(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                return self.send_json({})
             data = self.body()
             if parsed.path == "/v1":
                 payload = json.loads(data)

@@ -118,6 +118,7 @@ function renderRelease(release) {
     metaItem('Период проверки', formatInterval(release.interval_minutes)),
     metaItem('Последняя проверка', formatDate(release.last_checked_at)),
     metaItem('Следующая проверка', release.enabled ? formatDate(release.next_check_at) : 'Остановлена'),
+    metaItem('Последняя отправка', formatDate(release.last_grabbed_at)),
   );
   if (release.sonarr_series_title) {
     meta.append(metaItem('Сериал в Sonarr', release.sonarr_series_title));

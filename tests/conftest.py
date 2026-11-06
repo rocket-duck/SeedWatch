@@ -49,6 +49,8 @@ class MockServices:
             10: {"id": 10, "title": "Show", "year": 2023, "seriesType": "anime"},
             20: {"id": 20, "title": "Other", "year": 2024, "seriesType": "standard"},
             30: {"id": 30, "title": "Demon", "year": 2026, "seriesType": "standard"},
+            40: {"id": 40, "title": "Fresh", "year": 2026, "seriesType": "anime"},
+            50: {"id": 50, "title": "Jade", "year": 2026, "seriesType": "anime"},
         }
         self.downloaded = {10: set(range(1, 174)), 20: {1}}
         self.season_files = {
@@ -70,6 +72,7 @@ class MockServices:
         self.qbit_auth = []
         self.anistar_pages = {}
         self.anistar_torrents = {}
+        self.gettorrent_requests = []
         self.added_torrents = []
         self.auth_method = "api_key"
         self.api_key = "qbt_test_key"
@@ -205,6 +208,7 @@ def handler_for(mock):
                 return self.send_json({"detail": "not found"}, 404)
             if parsed.path == "/engine/gettorrent.php":
                 torrent_id = int(parse_qs(parsed.query)["id"][0])
+                mock.gettorrent_requests.append(torrent_id)
                 if torrent_id in mock.anistar_torrents:
                     body = mock.anistar_torrents[torrent_id]
                     self.send_response(200)

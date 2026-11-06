@@ -40,7 +40,7 @@ def test_settings_page_and_series_list(client, configure):
     assert "API key (qBittorrent 5.2+)" in page
     series = client.get("/api/sonarr/series")
     assert series.status_code == 200
-    assert len(series.json()) == 3
+    assert len(series.json()) == 5
 
 
 def test_immediate_sonarr_download_applies_delta_with_bearer(client, configure, services):

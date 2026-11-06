@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .anistar import decode_page, is_anistar_url, parse_series_page, select_torrents, series_id_from_url
 from .config import Settings
 from .flaresolverr import FlareSolverrClient, FlareSolverrError
 from .prowlarr import ProwlarrClient, ProwlarrError
@@ -273,6 +274,8 @@ class Monitor:
         identity = release_identity(url)
         if not identity:
             raise MonitorError("Нужна корректная HTTP(S)-ссылка на страницу раздачи")
+        if is_anistar_url(url):
+            return await self._add_anistar_release(url, interval_minutes, sonarr_series_id)
         if self.store.get_by_url(url):
             raise MonitorError("Эта раздача уже добавлена")
 
@@ -334,6 +337,8 @@ class Monitor:
                 return None
             next_check = timestamp(utc_now() + timedelta(minutes=current["interval_minutes"]))
             self.store.update_release(release_id, next_check_at=next_check, updated_at=timestamp())
+            if current["source"] == "anistar":
+                return await self._check_anistar_release(current, initial)
             try:
                 query = current["search_query"]
                 topic_title = None
@@ -463,3 +468,279 @@ class Monitor:
                 if current["last_status"] != "error" or current["last_error"] != message:
                     self.store.add_history(release_id, now, "error", current["title"], message)
                 return self.store.get_release(release_id)
+
+    async def _fetch_anistar_html(self, url: str) -> str:
+        if self.flaresolverr.configured:
+            try:
+                return await self.flaresolverr.get(url)
+            except FlareSolverrError as exc:
+                raise MonitorError(f"Не удалось прочитать страницу AniStar через FlareSolverr: {exc}") from exc
+        try:
+            response = await self.http.get(url)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise MonitorError(f"Не удалось прочитать страницу AniStar: {exc}") from exc
+        return decode_page(response.content)
+
+    async def _add_anistar_release(
+        self, url: str, interval_minutes: int, sonarr_series_id: int | None
+    ) -> dict:
+        if self.store.get_by_url(url):
+            raise MonitorError("Эта раздача уже добавлена")
+        html = await self._fetch_anistar_html(url)
+        page = parse_series_page(html)
+        torrents = page["torrents"]
+        series = None
+        downloaded = None
+        if sonarr_series_id:
+            series = await self.sonarr.get_series(sonarr_series_id)
+            downloaded = await self.sonarr.downloaded_episodes(
+                sonarr_series_id, series.get("seriesType", "anime"), force_absolute=True
+            )
+        catch_up = bool(sonarr_series_id) and not downloaded
+        known = [self._known_record(torrent, processed=not catch_up) for torrent in torrents]
+        selection = None
+        if catch_up:
+            selection = select_torrents(torrents, known, catch_up=True, downloaded=None)
+            if selection["selected"] and not self.qbit.configured:
+                raise MonitorError("QBIT_URL не задан")
+        now = utc_now()
+        release = self.store.create_release(
+            {
+                "url": url,
+                "topic_id": series_id_from_url(url) or url,
+                "search_query": None,
+                "topic_title": None,
+                "title": page["title"],
+                "episodes": sorted({ep for torrent in torrents for ep in torrent["episodes"]}),
+                "interval_minutes": interval_minutes,
+                "enabled": True,
+                "last_status": "monitoring",
+                "last_error": None,
+                "last_checked_at": timestamp(now),
+                "last_grabbed_at": None,
+                "next_check_at": timestamp(now + timedelta(minutes=interval_minutes)),
+                "created_at": timestamp(now),
+                "updated_at": timestamp(now),
+                "sonarr_series_id": series["id"] if series else None,
+                "sonarr_series_title": series["title"] if series else None,
+                "sonarr_series_type": series.get("seriesType", "anime") if series else None,
+                "source": "anistar",
+                "known_torrents": known,
+            }
+        )
+        if selection and selection["selected"]:
+            category = await self._anistar_category()
+            await self._process_anistar_selection(
+                release["id"], page["title"], torrents, known, selection, category
+            )
+        return self.store.get_release(release["id"])
+
+    async def _check_anistar_release(self, release: dict, initial: bool) -> dict | None:
+        release_id = release["id"]
+        try:
+            html = await self._fetch_anistar_html(release["url"])
+            page = parse_series_page(html)
+            torrents = page["torrents"]
+            if not torrents:
+                raise MonitorError(
+                    "Страница разобрана, но торренты не найдены — возможно, изменилась вёрстка"
+                )
+            known = release["known_torrents"]
+            downloaded = None
+            if release["sonarr_series_id"]:
+                downloaded = await self.sonarr.downloaded_episodes(
+                    release["sonarr_series_id"], release["sonarr_series_type"] or "anime",
+                    force_absolute=True,
+                )
+            catch_up = (
+                bool(release["sonarr_series_id"])
+                and not downloaded
+                and not any(record["processed"] for record in known)
+            )
+            selection = select_torrents(torrents, known, catch_up, downloaded)
+            if selection["new_seen"] > 15 and not catch_up:
+                raise MonitorError(
+                    "Подозрительно много новых торрентов на странице "
+                    f"({selection['new_seen']}) — проверка пропущена"
+                )
+            if not selection["selected"]:
+                merged = self._merge_known_torrents(known, selection["processed"], set())
+                episodes = sorted({ep for torrent in torrents for ep in torrent["episodes"]})
+                now = timestamp()
+                self.store.update_release(
+                    release_id,
+                    title=page["title"],
+                    episodes=episodes,
+                    known_torrents=merged,
+                    last_status="ok",
+                    last_error=None,
+                    last_checked_at=now,
+                    updated_at=now,
+                )
+                skipped = self._anistar_skipped_episodes(torrents, known, catch_up, downloaded)
+                if skipped:
+                    message = "; ".join(f"Серия {ep} уже скачана в Sonarr" for ep in skipped)
+                    self.store.add_history(release_id, now, "ok", page["title"], message)
+                return self.store.get_release(release_id)
+            if not self.qbit.configured:
+                raise MonitorError("QBIT_URL не задан")
+            category = await self._anistar_category()
+            return await self._process_anistar_selection(
+                release_id, page["title"], torrents, known, selection, category
+            )
+        except Exception as exc:
+            now = timestamp()
+            message = str(exc)
+            self.store.update_release(
+                release_id,
+                last_status="error",
+                last_error=message,
+                last_checked_at=now,
+                updated_at=now,
+            )
+            if release["last_status"] != "error" or release["last_error"] != message:
+                self.store.add_history(release_id, now, "error", release["title"], message)
+            return self.store.get_release(release_id)
+
+    async def _process_anistar_selection(
+        self, release_id: int, title: str, torrents: list[dict], known: list[dict],
+        selection: dict, category: str | None,
+    ) -> dict:
+        selected = selection["selected"]
+        grabbed, failures = await self._grab_anistar_torrents(release_id, selected, category)
+        grabbed_ids = set(grabbed)
+        merged = self._merge_known_torrents(known, selection["processed"], grabbed_ids)
+        episodes = sorted({ep for torrent in torrents for ep in torrent["episodes"]})
+        messages = []
+        for item in selected:
+            if item["torrent"]["id"] not in grabbed_ids:
+                continue
+            torrent = item["torrent"]
+            seeds = torrent["seeds"] if torrent["seeds"] is not None else "не указаны"
+            messages.append(
+                f"Серия {compact_episodes(item['episodes'])}: отправлен торрент "
+                f"{torrent['id']} ({self._anistar_voice_label(torrent['comment'])}, сиды {seeds})"
+            )
+        messages.extend(failures)
+        if grabbed:
+            status = "grabbed"
+            error = "; ".join(failures) or None
+        else:
+            status = "error"
+            error = "; ".join(failures) or "Не удалось отправить торренты"
+        now = timestamp()
+        fields = {
+            "title": title,
+            "episodes": episodes,
+            "known_torrents": merged,
+            "last_status": status,
+            "last_error": error,
+            "last_checked_at": now,
+            "updated_at": now,
+        }
+        if grabbed:
+            fields["last_grabbed_at"] = now
+        self.store.update_release(release_id, **fields)
+        if messages:
+            self.store.add_history(release_id, now, status, title, "; ".join(messages))
+        return self.store.get_release(release_id)
+
+    async def _grab_anistar_torrents(
+        self, release_id: int, selected: list[dict], category: str | None
+    ) -> tuple[list[int], list[str]]:
+        release = self.store.get_release(release_id)
+        parsed = urlparse(release["url"])
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        grabbed = []
+        failures = []
+        for item in selected:
+            torrent = item["torrent"]
+            tid = torrent["id"]
+            episodes = compact_episodes(item["episodes"])
+            prefix = f"Серия {episodes}: торрент {tid}"
+            try:
+                response = await self.http.get(f"{base}/engine/gettorrent.php", params={"id": tid})
+            except httpx.HTTPError as exc:
+                failures.append(f"{prefix} не скачан: {exc}")
+                continue
+            if response.status_code != 200:
+                failures.append(f"{prefix} не скачан: HTTP {response.status_code}")
+                continue
+            if not response.content.startswith(b"d8:announce"):
+                failures.append(f"{prefix}: получен не торрент-файл")
+                continue
+            try:
+                await self.qbit.add_torrent(response.content, f"anistar-{tid}.torrent", category)
+            except QbitError as exc:
+                failures.append(f"{prefix} не добавлен в qBittorrent: {exc}")
+                continue
+            grabbed.append(tid)
+        return grabbed, failures
+
+    async def _anistar_category(self) -> str | None:
+        try:
+            return await self.sonarr.download_category()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _known_record(torrent: dict, processed: bool) -> dict:
+        return {
+            "id": torrent["id"],
+            "episodes": torrent["episodes"],
+            "comment": torrent["comment"],
+            "processed": processed,
+            "grabbed": False,
+        }
+
+    @staticmethod
+    def _merge_known_torrents(
+        known: list[dict], processed_pass: list[dict], grabbed_ids: set[int]
+    ) -> list[dict]:
+        known_by_id = {record["id"]: record for record in known}
+        merged = []
+        seen = set()
+        for entry in processed_pass:
+            tid = entry["id"]
+            old = known_by_id.get(tid)
+            failed = entry["grabbed"] and tid not in grabbed_ids
+            merged.append(
+                {
+                    "id": tid,
+                    "episodes": entry["episodes"],
+                    "comment": entry["comment"],
+                    "grabbed": bool(tid in grabbed_ids or (old and old["grabbed"])),
+                    "processed": not failed,
+                }
+            )
+            seen.add(tid)
+        for record in known:
+            if record["id"] not in seen:
+                merged.append(record)
+        return merged
+
+    @staticmethod
+    def _anistar_skipped_episodes(
+        torrents: list[dict], known: list[dict], catch_up: bool, downloaded: set[int] | None
+    ) -> list[int]:
+        if not downloaded:
+            return []
+        known_by_id = {record["id"]: record for record in known}
+        candidates = [
+            torrent
+            for torrent in torrents
+            if torrent["episodes"]
+            and (catch_up or not (known_by_id.get(torrent["id"]) or {}).get("processed"))
+        ]
+        wanted = {ep for torrent in candidates for ep in torrent["episodes"]}
+        return sorted(wanted & downloaded)
+
+    @staticmethod
+    def _anistar_voice_label(comment: str) -> str:
+        lowered = comment.lower()
+        if "многоголос" in lowered:
+            return "многоголосая озвучка"
+        if "одноголос" in lowered:
+            return "одноголосая озвучка"
+        return "без комментария"

@@ -76,7 +76,13 @@ class SonarrClient:
                     return str(field["value"]).strip()
         return None
 
-    async def downloaded_episodes(self, series_id: int, series_type: str, season: int | None = None) -> set[int]:
+    async def downloaded_episodes(
+        self,
+        series_id: int,
+        series_type: str,
+        season: int | None = None,
+        force_absolute: bool = False,
+    ) -> set[int]:
         try:
             async with self._client() as client:
                 response = await client.get("/episode", params={"seriesId": series_id})
@@ -92,6 +98,8 @@ class SonarrClient:
                 if episode.get("seasonNumber") != season:
                     continue
                 number = episode.get("episodeNumber")
+            elif force_absolute:
+                number = episode.get("absoluteEpisodeNumber") or episode.get("episodeNumber")
             else:
                 number = episode.get("absoluteEpisodeNumber") if series_type == "anime" else None
                 number = number or episode.get("episodeNumber")

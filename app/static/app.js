@@ -90,6 +90,15 @@ function actionButton(label, action, id, style = 'secondary') {
   return button;
 }
 
+function isAnistarUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return /(^|\.)anistar\.org$/.test(host) || /(^|\.)astar\.bz$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
 function renderRelease(release) {
   const card = element('article', `release${release.enabled ? '' : ' paused'}`);
   const header = element('div', 'release-header');
@@ -99,6 +108,9 @@ function renderRelease(release) {
   title.rel = 'noreferrer';
   const status = release.enabled ? release.last_status : 'paused';
   header.append(title, element('span', `badge ${status}`, release.enabled ? (statusNames[status] || status) : 'На паузе'));
+  if (release.source === 'anistar') {
+    header.append(element('span', 'badge source', 'AniStar'));
+  }
 
   const meta = element('div', 'release-meta');
   meta.append(
@@ -143,6 +155,7 @@ function openEditDialog(release) {
   document.querySelector('#edit-release-title').textContent = release.title;
   editForm.elements.interval_days.value = Math.round(release.interval_minutes / 1440) || 1;
   editForm.elements.search_query.value = release.search_query || '';
+  document.querySelector('#edit-search-query-field').hidden = release.source === 'anistar';
   const options = [new Option('Без интеграции Sonarr', '')];
   for (const option of sonarrSeriesSelect.options) {
     if (option.value) options.push(new Option(option.text, option.value));
@@ -189,26 +202,43 @@ async function loadSonarrSeries() {
   }
 }
 
+const searchQueryField = document.querySelector('#search-query-field');
+form.elements.url.addEventListener('input', () => {
+  searchQueryField.hidden = isAnistarUrl(form.elements.url.value);
+});
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = form.querySelector('button[type="submit"]');
   const data = new FormData(form);
-  button.disabled = true;
-  formMessage.className = 'form-message';
-  formMessage.textContent = 'Ищем раздачу через Prowlarr…';
+  const url = data.get('url');
+  const sonarrSeriesId = data.get('sonarr_series_id') ? Number(data.get('sonarr_series_id')) : null;
   try {
+    if (isAnistarUrl(url) && sonarrSeriesId) {
+      const series = await api(`/api/sonarr/series/${sonarrSeriesId}`);
+      if (!series.downloaded_count
+          && !window.confirm('Сериал пуст — будут скачаны все серии со страницы. Продолжить?')) {
+        return;
+      }
+    }
+    button.disabled = true;
+    formMessage.className = 'form-message';
+    formMessage.textContent = isAnistarUrl(url)
+      ? 'Добавляем сериал с AniStar…'
+      : 'Ищем раздачу через Prowlarr…';
     await api('/api/releases', {
       method: 'POST',
       timeout: 300000,
       body: JSON.stringify({
-        url: data.get('url'),
+        url: url,
         interval_days: Number(data.get('interval_days')),
         search_query: data.get('search_query') || null,
-        sonarr_series_id: data.get('sonarr_series_id') ? Number(data.get('sonarr_series_id')) : null,
+        sonarr_series_id: sonarrSeriesId,
       }),
     });
     form.reset();
     form.querySelector('[name="interval_days"]').value = 1;
+    searchQueryField.hidden = false;
     formMessage.className = 'form-message success';
     formMessage.textContent = 'Раздача добавлена и проверена.';
     await loadReleases();

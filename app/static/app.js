@@ -216,10 +216,10 @@ form.addEventListener('submit', async (event) => {
   try {
     if (isAnistarUrl(url) && sonarrSeriesId) {
       const series = await api(`/api/sonarr/series/${sonarrSeriesId}`);
-      if (!series.downloaded_count
-          && !window.confirm('Сериал пуст — будут скачаны все серии со страницы. Продолжить?')) {
-        return;
-      }
+      const prompt = series.downloaded_count
+        ? 'Будут докачаны серии со страницы, которых нет в Sonarr. Продолжить?'
+        : 'Сериал пуст — будут скачаны все серии со страницы. Продолжить?';
+      if (!window.confirm(prompt)) return;
     }
     button.disabled = true;
     formMessage.className = 'form-message';

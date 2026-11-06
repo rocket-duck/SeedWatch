@@ -497,11 +497,11 @@ class Monitor:
             downloaded = await self.sonarr.downloaded_episodes(
                 sonarr_series_id, series.get("seriesType", "anime"), force_absolute=True
             )
-        catch_up = bool(sonarr_series_id) and not downloaded
+        catch_up = bool(sonarr_series_id)
         known = [self._known_record(torrent, processed=not catch_up) for torrent in torrents]
         selection = None
         if catch_up:
-            selection = select_torrents(torrents, known, catch_up=True, downloaded=None)
+            selection = select_torrents(torrents, known, catch_up=True, downloaded=downloaded)
             if selection["selected"] and not self.qbit.configured:
                 raise MonitorError("QBIT_URL не задан")
         now = utc_now()
@@ -536,6 +536,11 @@ class Monitor:
             category = await self._anistar_category()
             await self._process_anistar_selection(
                 release["id"], page["title"], torrents, known, selection, category
+            )
+        elif selection is not None:
+            self.store.update_release(
+                release["id"],
+                known_torrents=[{**record, "processed": True} for record in known],
             )
         return self.store.get_release(release["id"])
 

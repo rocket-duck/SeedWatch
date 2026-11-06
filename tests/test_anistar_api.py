@@ -154,7 +154,24 @@ def test_add_catch_up_empty_sonarr(client, anistar):
     )
 
 
-def test_add_baseline_partial_sonarr(client, anistar):
+def test_add_backfills_missing_episodes(client, anistar):
+    anistar.custom_episodes[50] = [
+        {"seasonNumber": 1, "episodeNumber": n, "absoluteEpisodeNumber": n, "hasFile": True}
+        for n in range(1, 61)
+    ]
+    page = seed_jade_torrents(anistar)
+    release = add_jade(client, anistar, series_id=50)
+
+    expected = select_torrents(page["torrents"], [], catch_up=True, downloaded=set(range(1, 61)))
+    assert expected["selected"]
+    assert all(ep > 60 for item in expected["selected"] for ep in item["episodes"])
+    assert len(anistar.added_torrents) == len(expected["selected"])
+    grabbed_ids = {record["id"] for record in release["known_torrents"] if record["grabbed"]}
+    assert grabbed_ids == {item["torrent"]["id"] for item in expected["selected"]}
+    assert all(record["processed"] for record in release["known_torrents"])
+
+
+def test_add_fully_downloaded_no_grabs(client, anistar):
     release = add_jade(client, anistar, series_id=10)
 
     assert anistar.added_torrents == []
@@ -180,9 +197,11 @@ def test_check_sends_new_episode(client, anistar):
 
 def test_check_skips_sonarr_downloaded(client, anistar):
     anistar.custom_episodes[50] = [
-        {"seasonNumber": 1, "episodeNumber": 92, "absoluteEpisodeNumber": 92, "hasFile": True}
+        {"seasonNumber": 1, "episodeNumber": n, "absoluteEpisodeNumber": n, "hasFile": True}
+        for n in range(1, 93)
     ]
     release = add_jade(client, anistar, series_id=50)
+    assert anistar.added_torrents == []
     anistar.anistar_pages[f"{anistar.base_url}{JADE_PATH}"] = jade_page_bytes(
         episode_block(99999, 92)
     )

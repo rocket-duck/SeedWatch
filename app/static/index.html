@@ -39,7 +39,7 @@
           <span>Интервал, дней</span>
           <input name="interval_days" type="number" required min="1" max="365" value="1">
         </label>
-        <label class="field field-query">
+        <label id="search-query-field" class="field field-query">
           <span>Поисковый запрос <small>необязательно</small></span>
           <input name="search_query" type="text" placeholder="Например: Douluo Dalu II">
           <small>Заполните, если страница раздачи недоступна или полное название плохо ищется.</small>
@@ -85,7 +85,7 @@
         <span>Интервал, дней</span>
         <input name="interval_days" type="number" required min="1" max="365">
       </label>
-      <label class="field">
+      <label id="edit-search-query-field" class="field">
         <span>Поисковый запрос <small>необязательно</small></span>
         <input name="search_query" type="text" placeholder="Пусто — брать название раздачи">
       </label>

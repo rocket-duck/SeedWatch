@@ -1,4 +1,4 @@
-"""Парсинг HTML-страниц сериалов с anistar.org (windows-1251)."""
+"""Парсинг HTML-страниц сериалов с anistar.org (windows-1251) и выбор торрентов."""
 
 import html as html_module
 import re
@@ -96,3 +96,83 @@ def _parse_label(label: str) -> tuple[list[int], str, str | None]:
     if last >= first and last - first <= _MAX_PACK_SPAN:
         return list(range(first, last + 1)), comment.strip(), size.strip()
     return [], comment.strip(), size.strip()
+
+
+def voice_tier(comment: str) -> int:
+    lowered = comment.lower()
+    if "многоголос" in lowered:
+        return 3
+    if "&" in comment:
+        return 2
+    if "одноголос" in lowered:
+        return 1
+    return 0
+
+
+def select_torrents(
+    torrents: list[dict],
+    known: list[dict],
+    catch_up: bool,
+    downloaded: set[int] | None,
+) -> dict:
+    known_by_id = {record["id"]: record for record in known}
+    downloaded = downloaded or set()
+
+    candidates = []
+    for torrent in torrents:
+        if not torrent["episodes"]:
+            continue  # не-серийный контент не качаем, только фиксируем в processed
+        record = known_by_id.get(torrent["id"])
+        if catch_up or record is None or not record.get("processed"):
+            candidates.append(torrent)
+
+    needs: set[int] = set()
+    for torrent in candidates:
+        needs.update(torrent["episodes"])
+    needs -= downloaded
+
+    ordered = sorted(
+        candidates,
+        key=lambda t: (
+            -voice_tier(t["comment"]),
+            len(t["episodes"]) > 1,  # одиночные раньше паков
+            -(t["seeds"] or 0),
+            -_date_sort_value(t["date"]),
+        ),
+    )
+
+    covered: set[int] = set()
+    selected = []
+    grabbed_ids: set[int] = set()
+    for torrent in ordered:
+        fresh = [ep for ep in torrent["episodes"] if ep in needs and ep not in covered]
+        if not fresh:
+            continue
+        selected.append({"torrent": torrent, "episodes": fresh})
+        grabbed_ids.add(torrent["id"])
+        covered.update(fresh)
+
+    processed = [
+        {
+            "id": torrent["id"],
+            "episodes": torrent["episodes"],
+            "comment": torrent["comment"],
+            "grabbed": torrent["id"] in grabbed_ids,
+        }
+        for torrent in torrents
+    ]
+    return {
+        "selected": selected,
+        "processed": processed,
+        "new_seen": sum(1 for torrent in torrents if torrent["id"] not in known_by_id),
+    }
+
+
+def _date_sort_value(date: str | None) -> int:
+    if not date:
+        return 0
+    try:
+        day, month, year = (int(part) for part in date.split("-"))
+    except ValueError:
+        return 0
+    return year * 10000 + month * 100 + day

@@ -3,7 +3,14 @@ from pathlib import Path
 import pytest
 
 import app.anistar
-from app.anistar import decode_page, is_anistar_url, parse_series_page, series_id_from_url
+from app.anistar import (
+    decode_page,
+    is_anistar_url,
+    parse_series_page,
+    select_torrents,
+    series_id_from_url,
+    voice_tier,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -100,3 +107,86 @@ def test_series_id_from_url():
     assert series_id_from_url("https://v2.astar.bz/8883-slug.html") == "8883"
     assert series_id_from_url("https://anistar.org/") is None
     assert series_id_from_url("https://anistar.org/news.html") is None
+
+
+def make_torrent(tid, episodes, comment="", seeds=None, date=None):
+    return {
+        "id": tid,
+        "episodes": episodes,
+        "comment": comment,
+        "label": "",
+        "size": None,
+        "seeds": seeds,
+        "date": date,
+    }
+
+
+def known_record(torrent, processed=False, grabbed=False):
+    return {
+        "id": torrent["id"],
+        "episodes": torrent["episodes"],
+        "comment": torrent["comment"],
+        "processed": processed,
+        "grabbed": grabbed,
+    }
+
+
+def test_voice_tiers():
+    assert voice_tier("Многоголосая озвучка") == 3
+    assert voice_tier("[Xelenum & Sati Akura]") == 2
+    assert voice_tier("Одноголосая озвучка") == 1
+    assert voice_tier("[Xelenum]") == 0
+    assert voice_tier("") == 0
+
+
+def test_same_episode_prefers_multi_voice(jade):
+    known = [known_record(t) for t in jade["torrents"]]
+    result = select_torrents(jade["torrents"], known, catch_up=False, downloaded=None)
+    ep14 = [s for s in result["selected"] if 14 in s["episodes"]]
+    assert len(ep14) == 1
+    assert ep14[0]["torrent"]["id"] == 31051
+
+
+def test_tie_break_by_seeds():
+    torrents = [
+        make_torrent(1, [5], seeds=5, date="01-01-2026"),
+        make_torrent(2, [5], seeds=12, date="02-01-2026"),
+    ]
+    result = select_torrents(torrents, [], catch_up=False, downloaded=None)
+    assert [s["torrent"]["id"] for s in result["selected"]] == [2]
+
+
+def test_processed_ids_not_candidates():
+    torrents = [make_torrent(1, [1], seeds=5), make_torrent(2, [2], seeds=7)]
+    known = [known_record(t, processed=True, grabbed=True) for t in torrents]
+    result = select_torrents(torrents, known, catch_up=False, downloaded=None)
+    assert result["selected"] == []
+    assert result["new_seen"] == 0
+
+
+def test_catch_up_selects_all(jade):
+    result = select_torrents(jade["torrents"], [], catch_up=True, downloaded=None)
+    covered = [ep for s in result["selected"] for ep in s["episodes"]]
+    assert sorted(covered) == list(range(1, 92))
+    assert len(covered) == len(set(covered))
+    assert result["new_seen"] == len(jade["torrents"])
+
+
+def test_downloaded_subtracted_and_pack_covers_rest():
+    downloaded = set(range(1, 61))
+    pack = make_torrent(100, list(range(1, 68)), seeds=9, date="01-01-2026")
+    single_61 = make_torrent(101, [61], seeds=1)
+    single_62 = make_torrent(102, [62], seeds=1)
+    result = select_torrents([pack, single_61, single_62], [], catch_up=False, downloaded=downloaded)
+    assert [s["torrent"]["id"] for s in result["selected"]] == [101, 102, 100]
+    pack_sel = next(s for s in result["selected"] if s["torrent"]["id"] == 100)
+    assert pack_sel["episodes"] == [63, 64, 65, 66, 67]
+
+    pack_small = make_torrent(200, list(range(1, 62)), seeds=9)
+    single = make_torrent(201, [61], seeds=1)
+    result2 = select_torrents([pack_small, single], [], catch_up=False, downloaded=downloaded)
+    assert [s["torrent"]["id"] for s in result2["selected"]] == [201]
+    pack_processed = next(p for p in result2["processed"] if p["id"] == 200)
+    assert pack_processed["grabbed"] is False
+    single_processed = next(p for p in result2["processed"] if p["id"] == 201)
+    assert single_processed["grabbed"] is True

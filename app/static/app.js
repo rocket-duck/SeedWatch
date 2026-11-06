@@ -211,20 +211,29 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = form.querySelector('button[type="submit"]');
   const data = new FormData(form);
-  button.disabled = true;
-  formMessage.className = 'form-message';
-  formMessage.textContent = isAnistarUrl(data.get('url'))
-    ? 'Добавляем сериал с AniStar…'
-    : 'Ищем раздачу через Prowlarr…';
+  const url = data.get('url');
+  const sonarrSeriesId = data.get('sonarr_series_id') ? Number(data.get('sonarr_series_id')) : null;
   try {
+    if (isAnistarUrl(url) && sonarrSeriesId) {
+      const series = await api(`/api/sonarr/series/${sonarrSeriesId}`);
+      if (!series.downloaded_count
+          && !window.confirm('Сериал пуст — будут скачаны все серии со страницы. Продолжить?')) {
+        return;
+      }
+    }
+    button.disabled = true;
+    formMessage.className = 'form-message';
+    formMessage.textContent = isAnistarUrl(url)
+      ? 'Добавляем сериал с AniStar…'
+      : 'Ищем раздачу через Prowlarr…';
     await api('/api/releases', {
       method: 'POST',
       timeout: 300000,
       body: JSON.stringify({
-        url: data.get('url'),
+        url: url,
         interval_days: Number(data.get('interval_days')),
         search_query: data.get('search_query') || null,
-        sonarr_series_id: data.get('sonarr_series_id') ? Number(data.get('sonarr_series_id')) : null,
+        sonarr_series_id: sonarrSeriesId,
       }),
     });
     form.reset();
